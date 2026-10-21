@@ -16,8 +16,7 @@ For a deployment in a bucket, add the `s3` extra:
 uv tool install "latent-wiki-mcp[s3] @ git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp"
 ```
 
-While the repository is private, run `gh auth login` once first. To move to a new release, run
-the line with the new tag; the tool is replaced without asking.
+To move to a new release, run the line with the new tag; the tool is replaced without asking.
 
 ## Run
 
