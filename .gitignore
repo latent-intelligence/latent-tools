@@ -1,0 +1,33 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+dist/
+
+# Local data — never versioned. No member keeps a deployment here, but the rule holds.
+/data
+
+# Environment. Local, per-machine, never versioned.
+.env
+.env.*
+!.env.example
+*.pem
+
+# Local agent instructions and settings
+CLAUDE.local.md
+.claude/settings.local.json
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/
+
+# Plans and decision records — unversioned for now
+/docs/context/plans/
+/docs/context/adrs/
+
+# Private working notes
+/references/
