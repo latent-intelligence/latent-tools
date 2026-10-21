@@ -18,8 +18,7 @@ whose space needs a model you did not install says so on the first search.
 uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.0#subdirectory=records-mcp"
 ```
 
-While the repository is private, run `gh auth login` once first. To move to a new release, run
-the line with the new tag; the tool is replaced without asking.
+To move to a new release, run the line with the new tag; the tool is replaced without asking.
 
 ## Run
 
