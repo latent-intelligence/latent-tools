@@ -1,35 +1,57 @@
-# latent-tools
+# Latent-Tools
 
-Installable tooling from Latent Intelligence: a uv workspace, one member per tool. Each member
-installs on its own, with nothing else from this repository:
+Tools for connecting AI assistants to published knowledge and records.
+Install only the tool you need.
+
+| Tool | What it does |
+|---|---|
+| [wiki-mcp](wiki-mcp/) | Read-only access to a published wiki, stored locally or in S3 |
+| [records-mcp](records-mcp/) | Read-only access to published records, stored locally or in object storage |
+
+These MCP servers are experimental. The existing `latent-wiki serve` and
+`latent-records serve` commands remain the recommended way to serve a store.
+
+## Install
+
+With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
+
+**Wiki**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@<member>-v<version>#subdirectory=<member>"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp"
+latent-wiki-mcp --help
 ```
 
-| Member | Command | What it is |
-|---|---|---|
-| [`wiki-mcp`](wiki-mcp/) | `latent-wiki-mcp` | A read-only MCP server over a published `latent-wiki` store, local or `s3://` |
-| [`records-mcp`](records-mcp/) | `latent-records-mcp` | A read-only MCP server over a published `latent-records` store, local or in object storage |
+**Records**
 
-**Status: an experiment.** The stores' own `serve` commands remain the
-documented way to serve a store (`latent-wiki serve`, `latent-records serve`). These servers answer the same tool contracts and are kept giving
-the same answers; the experiment decides whether serving moves here.
+```bash
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.0#subdirectory=records-mcp"
+latent-records-mcp --help
+```
 
-While the repository is private, `gh auth login` once, so git can authenticate; the install line
-is the same afterwards. To move to a new release, run the line with the new tag: `uv tool upgrade`
-holds a pin. Running the line with a different tag replaces the installed version without asking.
+Each tool has its own releases. To update, rerun its install command with
+the new release tag.
+
+## Shortcut: run with uvx
+
+Use `uvx` to run either tool without a separate install step:
+
+```bash
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp" latent-wiki-mcp --help
+```
+
+```bash
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.0#subdirectory=records-mcp" latent-records-mcp --help
+```
+
+See each tool’s README for configuration and usage.
 
 ## Developing
 
 ```bash
-uv sync --all-packages        # every member and the dev tools, one lockfile
-just check                    # ruff, mypy strict, pytest, for every member
-just check wiki-mcp           # one member
-just smoke wiki-mcp           # install the member into a clean uv tool environment and talk to it over stdio
-just conform                  # a member and the store's own serve give the same answers (needs both installed)
+uv sync --all-packages
+just check                 # check all tools
+just check wiki-mcp         # check one tool
+just smoke wiki-mcp         # check installation and startup
+just conform               # compare with the stores' serve commands
 ```
-
-A new tool is a new directory and one line in the root `pyproject.toml`. A server member is named
-`<store>-mcp`; another tool is named by what it does. Each member has its own version, tagged
-`<member>-v<version>`.
