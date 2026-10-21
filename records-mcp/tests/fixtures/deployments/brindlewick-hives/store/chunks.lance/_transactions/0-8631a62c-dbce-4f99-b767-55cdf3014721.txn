@@ -1,0 +1,4 @@
+$8631a62c-dbce-4f99-b767-55cdf3014721²óid ÿÿÿÿÿÿÿÿÿ*string8"	record_id ÿÿÿÿÿÿÿÿÿ*string8seq ÿÿÿÿÿÿÿÿÿ*int328 chapter ÿÿÿÿÿÿÿÿÿ*string8 section ÿÿÿÿÿÿÿÿÿ*list08item *string08#text ÿÿÿÿÿÿÿÿÿ*large_string8 tokens ÿÿÿÿÿÿÿÿÿ*int3208$
+char_start ÿÿÿÿÿÿÿÿÿ*int3208"char_end	 ÿÿÿÿÿÿÿÿÿ*int3208$
+page_start
+ ÿÿÿÿÿÿÿÿÿ*int3208"page_end ÿÿÿÿÿÿÿÿÿ*int3208refs ÿÿÿÿÿÿÿÿÿ*list08item *string08'content_sha256 ÿÿÿÿÿÿÿÿÿ*string8

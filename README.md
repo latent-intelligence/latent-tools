@@ -10,9 +10,10 @@ uv tool install "git+https://github.com/latent-intelligence/latent-tools@<member
 | Member | Command | What it is |
 |---|---|---|
 | [`wiki-mcp`](wiki-mcp/) | `latent-wiki-mcp` | A read-only MCP server over a published `latent-wiki` store, local or `s3://` |
+| [`records-mcp`](records-mcp/) | `latent-records-mcp` | A read-only MCP server over a published `latent-records` store, local or in object storage |
 
-**Status: an experiment.** The stores' own `serve` commands (`latent-wiki serve`) remain the
-documented way to serve a store. These servers answer the same tool contracts and are kept giving
+**Status: an experiment.** The stores' own `serve` commands remain the
+documented way to serve a store (`latent-wiki serve`, `latent-records serve`). These servers answer the same tool contracts and are kept giving
 the same answers; the experiment decides whether serving moves here.
 
 While the repository is private, `gh auth login` once, so git can authenticate; the install line

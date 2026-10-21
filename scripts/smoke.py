@@ -44,7 +44,16 @@ def _wiki(into: Path) -> Path:
     return root
 
 
+def _records(into: Path) -> Path:
+    fixture = ROOT / "records-mcp" / "tests" / "fixtures" / "deployments"
+    shutil.copytree(fixture / "brindlewick-hives", into / "brindlewick-hives")
+    return into / "brindlewick-hives"
+
+
 SMOKE: dict[str, Smoke] = {
+    "records-mcp": Smoke(
+        _records, ("contains", {"phrase": "frame card"}), '"total": 4'
+    ),
     "wiki-mcp": Smoke(
         _wiki, ("wiki_search", {"query": "limpets"}), "heronsgate:count-limpets"
     ),

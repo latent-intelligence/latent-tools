@@ -1,0 +1,25 @@
+# Fixture deployment. Names are deliberately distinctive so the grep test in
+# tests/test_deployment.py can prove none of them leaked into src/.
+schema_version: 1
+store_id: brindlewick-hives
+title: Brindlewick Apiary
+description: Field notes on comb-ledger keeping, for the package tests.
+inputs:
+  hive-notes:
+    format: doc-intelligence
+    path: ../../doc-intelligence/hive-notes
+    artifacts: [text, figures, tables]
+chunking:
+  target_tokens: 60
+  max_tokens: 120
+  overlap_tokens: 10
+spaces:
+  hivewright:
+    embedder: hash
+    dims: 32
+    targets: [chunks, tables, figure_captions, figure_images]
+  hivewright-windowed:
+    embedder: hash
+    dims: 32
+    window: {tokens: 20, stride: 15}
+    targets: [chunks]

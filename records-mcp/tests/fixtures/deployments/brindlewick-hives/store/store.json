@@ -1,0 +1,132 @@
+{
+  "format": "latent-records.store",
+  "format_version": 1,
+  "store_id": "brindlewick-hives",
+  "title": "Brindlewick Apiary",
+  "generated": "2026-10-21T01:15:07Z",
+  "producer": {
+    "package": "latent-records",
+    "version": "0.2.0"
+  },
+  "backend": {
+    "kind": "lancedb"
+  },
+  "tables": {
+    "records": {
+      "table": "records",
+      "path": "records.lance",
+      "key": "record_id",
+      "rows": 2
+    },
+    "chunks": {
+      "table": "chunks",
+      "path": "chunks.lance",
+      "key": "id",
+      "rows": 8,
+      "parent": "records",
+      "text_column": "text",
+      "fts": true,
+      "provenance": [
+        "record_id",
+        "chapter",
+        "section",
+        "page_start",
+        "page_end"
+      ]
+    },
+    "figures": {
+      "table": "figures",
+      "path": "figures.lance",
+      "key": "id",
+      "rows": 4,
+      "parent": "records",
+      "text_column": "text",
+      "fts": true,
+      "provenance": [
+        "record_id",
+        "key",
+        "page",
+        "bbox"
+      ],
+      "media_column": "media_path"
+    },
+    "tables": {
+      "table": "tables",
+      "path": "tables.lance",
+      "key": "id",
+      "rows": 2,
+      "parent": "records",
+      "text_column": "text",
+      "fts": true,
+      "provenance": [
+        "record_id",
+        "key",
+        "page",
+        "bbox"
+      ]
+    }
+  },
+  "spaces": {
+    "hivewright": {
+      "dims": 32,
+      "embedder": "hash",
+      "window": null,
+      "metric": "cosine",
+      "normalized": true,
+      "query_modalities": [
+        "image",
+        "text"
+      ],
+      "fingerprint": "sha256:3a995c33cbe4d968e6d032e002debd0967daf25ba214e1ba99432578cf66db44",
+      "targets": {
+        "chunks": {
+          "table": "chunks__hivewright",
+          "source": "chunks",
+          "column": "text",
+          "rows": 8
+        },
+        "figure_captions": {
+          "table": "figure_captions__hivewright",
+          "source": "figures",
+          "column": "text",
+          "rows": 3
+        },
+        "figure_images": {
+          "table": "figure_images__hivewright",
+          "source": "figures",
+          "column": "media_path",
+          "rows": 4
+        },
+        "tables": {
+          "table": "tables__hivewright",
+          "source": "tables",
+          "column": "text",
+          "rows": 2
+        }
+      }
+    },
+    "hivewright-windowed": {
+      "dims": 32,
+      "embedder": "hash",
+      "window": {
+        "stride": 15,
+        "tokens": 20
+      },
+      "metric": "cosine",
+      "normalized": true,
+      "query_modalities": [
+        "image",
+        "text"
+      ],
+      "fingerprint": "sha256:3f59671648f6909a4161395490494379ec19ddf7d65a6d7c6b74e0ca3be75f05",
+      "targets": {
+        "chunks": {
+          "table": "chunks__hivewright_windowed",
+          "source": "chunks",
+          "column": "text",
+          "rows": 8
+        }
+      }
+    }
+  }
+}

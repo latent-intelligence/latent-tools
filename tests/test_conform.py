@@ -128,3 +128,44 @@ def test_the_store_command_is_the_one_documented() -> None:
     command = _store_command("latent-wiki")
     out = subprocess.run([*command, "serve", "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "--deployment" in out.stdout
+
+
+# -- records --------------------------------------------------------------------
+
+RECORDS_FIXTURE = (
+    ROOT / "records-mcp" / "tests" / "fixtures" / "deployments" / "brindlewick-hives"
+)
+
+RECORDS_CALLS: list[tuple[str, dict[str, Any]]] = [
+    ("describe", {}),
+    ("search", {"query": "mouse guards", "space": "hivewright", "limit": 3}),
+    ("search", {"query": "frame", "mode": "fts", "limit": 50}),
+    ("search", {"query": "comb", "target": "figure_captions", "space": "hivewright"}),
+    ("contains", {"phrase": "frame card"}),
+    ("contains", {"phrase": "opportunity mandate"}),
+    ("get", {"id": "comb-ledger-a::chunk::0001"}),
+    ("get", {"id": "brindlewick-hives:comb-ledger-a"}),
+    ("get", {"id": "comb-ledger-a::chunk::9999"}),  # refused by both
+    ("search", {"query": "comb"}),  # several spaces: refused by both
+    ("search", {"query": "comb", "space": "hivewright", "limit": 0}),  # refused
+    ("contains", {"phrase": "frame card", "tag": "x"}),  # undeclared: refused
+]
+
+
+@pytest.fixture
+def records_deployment(tmp_path: Path) -> Path:
+    shutil.copytree(RECORDS_FIXTURE, tmp_path / "brindlewick-hives")
+    return tmp_path / "brindlewick-hives"
+
+
+async def test_records_mcp_answers_as_latent_records_serve_does(
+    records_deployment: Path,
+) -> None:
+    folder = str(records_deployment)
+    store = [*_store_command("latent-records"), "serve", "--deployment", folder]
+    tool = [sys.executable, "-m", "latent_records_mcp.cli", "--deployment", folder]
+    theirs = await _replies(store, RECORDS_CALLS)
+    ours = await _replies(tool, RECORDS_CALLS)
+    assert ours["name"] == theirs["name"] == "brindlewick-hives"
+    for key in theirs:
+        assert ours[key] == theirs[key], key

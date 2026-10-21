@@ -5,7 +5,7 @@
 # Members are listed one per line, so adding a tool is a new directory and one line here.
 
 [tool.uv.workspace]
-members = ["wiki-mcp"]
+members = ["wiki-mcp", "records-mcp"]
 
 [dependency-groups]
 dev = [
@@ -29,9 +29,13 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["wiki-mcp/src", "tests", "scripts"]
+files = ["wiki-mcp/src", "records-mcp/src", "tests", "scripts"]
+
+[[tool.mypy.overrides]]
+module = ["lancedb.*", "pyarrow.*", "open_clip.*", "sentence_transformers.*", "torch.*", "PIL.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
-testpaths = ["tests", "wiki-mcp/tests"]
+testpaths = ["tests", "wiki-mcp/tests", "records-mcp/tests"]
 addopts = "-ra --import-mode=importlib -m 'not conform'"
 markers = ["conform: needs both the tool and the store's own serve installed (just conform)"]

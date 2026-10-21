@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "latent-records-mcp"
+version = "0.1.0"
+description = "A standalone MCP server over a published latent-records store — read-only, local or in object storage."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Latent Intelligence" }]
+dependencies = [
+    "lancedb>=0.39,<0.40",
+    "pyarrow>=18.0",
+    "numpy>=1.26",
+    "typer>=0.16",
+    "rich>=13.0",
+    "pyyaml>=6.0",
+    "universal-pathlib>=0.2",
+    "fsspec>=2024.0",
+    # One `mcp` pin across every member and the store packages (house rule); uvicorn is the
+    # HTTP transport, already in every mcp 2.x install and named because `serve.py` imports it.
+    "mcp>=2.0,<3",
+    "uvicorn>=0.30",
+]
+
+[project.optional-dependencies]
+text = ["sentence-transformers>=3.0"]
+clip = ["open-clip-torch>=2.24", "pillow>=10.0"]
+s3 = ["s3fs>=2024.0"]
+gcs = ["gcsfs>=2024.0"]
+az = ["adlfs>=2024.0"]
+
+[project.scripts]
+latent-records-mcp = "latent_records_mcp.cli:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/latent_records_mcp"]
+
+[tool.hatch.build.targets.sdist]
+only-include = ["src", "tests", "README.md", "pyproject.toml"]

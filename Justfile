@@ -7,9 +7,9 @@
 default:
     @just --list
 
-# Install every member and the dev tools.
+# Install every member and the dev tools; the model extras (text, clip) stay out.
 install:
-    uv sync --all-packages --all-extras
+    uv sync --all-packages --all-extras --no-extra text --no-extra clip
 
 # Update the lockfile.
 lock:

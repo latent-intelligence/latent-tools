@@ -244,7 +244,9 @@ def test_reads_only_the_version_and_the_root(pushed: str) -> None:
 
 def test_malformed_yaml_is_one_line(deployment: Path) -> None:
     _declare(str(deployment), "schema_version: 1\nroot: [unclosed\n")
-    _one_line_refusal(_run("--deployment", str(deployment)), "not valid YAML")
+    result = _run("--deployment", str(deployment))
+    _one_line_refusal(result, "not valid YAML")
+    assert "line 3, column 1" in result.output
 
 
 def test_a_case_variant_of_root_is_refused(deployment: Path) -> None:
@@ -261,7 +263,7 @@ def test_a_remote_root_is_never_expanded_with_this_environment(
     for root in ("x-${LATENT_WIKI_SERVE_TOKEN}", "$HOME/wikis", "~/wikis"):
         _declare(pushed, f"schema_version: 1\nroot: {root}\n")
         result = _run("--deployment", pushed)
-        _one_line_refusal(result, "is a local path")
+        _one_line_refusal(result, "names this host's environment")
         assert "sekrit" not in result.output
 
 
@@ -321,7 +323,6 @@ def test_a_failed_read_says_why(pushed: str, monkeypatch: pytest.MonkeyPatch) ->
 def test_a_remote_declaration_with_a_local_root_is_refused(pushed: str) -> None:
     for root in (
         "/srv/wikis/survey",
-        "~/wikis/survey",
         "file:///srv/wikis/survey",
         "simplecache::file:///srv/wikis/survey",
     ):

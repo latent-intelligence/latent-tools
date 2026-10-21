@@ -1,0 +1,3 @@
+$eee33ea2-f397-4391-96e5-19ba997b6582²äid ÿÿÿÿÿÿÿÿÿ*string8"	record_id ÿÿÿÿÿÿÿÿÿ*string8key ÿÿÿÿÿÿÿÿÿ*string8page ÿÿÿÿÿÿÿÿÿ*int32080bbox ÿÿÿÿÿÿÿÿÿ*fixed_size_list:float:408!number ÿÿÿÿÿÿÿÿÿ*string08"caption ÿÿÿÿÿÿÿÿÿ*string08'caption_kind ÿÿÿÿÿÿÿÿÿ*string08#text ÿÿÿÿÿÿÿÿÿ*large_string8%
+media_path	 ÿÿÿÿÿÿÿÿÿ*string08'media_sha256
+ ÿÿÿÿÿÿÿÿÿ*string08%media_bytes ÿÿÿÿÿÿÿÿÿ*int6408'content_sha256 ÿÿÿÿÿÿÿÿÿ*string8

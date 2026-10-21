@@ -1,0 +1,3 @@
+$4333bb74-b7d7-4452-921a-9b183dc52add²ö 	record_id ÿÿÿÿÿÿÿÿÿ*string8input ÿÿÿÿÿÿÿÿÿ*string8 title ÿÿÿÿÿÿÿÿÿ*string08&source_sha256 ÿÿÿÿÿÿÿÿÿ*string8pages ÿÿÿÿÿÿÿÿÿ*int3208(chapters ÿÿÿÿÿÿÿÿÿ*list.struct08item *struct0file *string08
+page_start *int3208page_end	 *int3208-outline_json
+ ÿÿÿÿÿÿÿÿÿ*large_string080extraction_json ÿÿÿÿÿÿÿÿÿ*large_string08&ingest_digest ÿÿÿÿÿÿÿÿÿ*string8.ingested_at ÿÿÿÿÿÿÿÿÿ*timestamp:us:UTC8

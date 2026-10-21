@@ -30,7 +30,8 @@ claude mcp add design -- latent-wiki-mcp --deployment <folder>
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
 fsspec opens (`s3://…/deployments/<name>`). The server reads the declaration's `schema_version`,
 `name` and `root:` and serves `<root>/wiki` with `<root>/context`; a remote declaration's root
-is taken as written, never expanded with this host's environment. It refuses a name, an unpublished
+is taken as written; one that needs this host's environment (`~`, `$VAR`) or its disk (an
+absolute path) is refused. It refuses a name, an unpublished
 store, and a remote declaration whose root is a local path.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a bearer

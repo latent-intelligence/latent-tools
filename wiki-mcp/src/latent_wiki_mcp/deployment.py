@@ -4,10 +4,17 @@ A deployment is a folder holding `<folder name>.yaml`: a local path, or any URI 
 opens, such as the copy a store's `just push` writes to a bucket. A server needs two
 things from the declaration: `schema_version`, which must be one it knows, and `root:`,
 where the products live, resolved against the folder wherever it is. The wiki is
-`<root>/wiki` and its context `<root>/context`. Everything else in the declaration
-(inputs, the authored config, briefs) is the authoring side's and is not read, so a
-declaration that grows a key still serves. A name is refused: looking one up is for the
-store's own authoring commands.
+`<root>/wiki` and its context `<root>/context`. It also checks `name`, as the store
+does. Everything else in the declaration (inputs, the authored config, briefs) is the
+authoring side's and is not read, so a declaration that grows a key still serves; the
+one typo it catches is a case-variant of `root`, which would otherwise serve the wrong
+folder in silence. A name is refused: looking one up is for the store's own authoring
+commands.
+
+A declaration read from another host is taken as written: a root with `~` or `$VAR` is
+refused rather than expanded with this host's environment, since no other host's values
+could be meant, and a value expanded here could carry this process's secrets into a
+request path.
 
 Adapted from latent-wiki's `deployment.py` (991549f): the same refusals, fewer keys.
 """
@@ -133,7 +140,12 @@ def _looks_local(value: str) -> bool:
     """Whether a declared location can only mean the writing host's own disk."""
     if "://" in value:
         return _scheme(value) in LOCAL_SCHEMES
-    return Path(value).is_absolute() or value.startswith("~") or "$" in value
+    return Path(value).is_absolute()
+
+
+def _names_environment(value: str) -> bool:
+    """Whether a declared location would need this host's environment to resolve."""
+    return "://" not in value and (value.startswith("~") or "$" in value)
 
 
 def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
@@ -150,12 +162,24 @@ def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
     return (path if path.is_absolute() else base / path).resolve()
 
 
+def _yaml_problem(exc: yaml.YAMLError) -> str:
+    """One line saying what is wrong and where, when YAML says."""
+    if isinstance(exc, yaml.MarkedYAMLError) and exc.problem_mark is not None:
+        mark = exc.problem_mark
+        where = f"line {mark.line + 1}, column {mark.column + 1}"
+        return f"{exc.problem or exc.context} at {where}"
+    text = str(exc).splitlines()
+    return text[0] if text else type(exc).__name__
+
+
 def _parse(text: str, source: Path) -> Deployment:
     """A declaration's text, read from `source`: its version, name and root."""
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
-        raise DeploymentError(f"{source}: not valid YAML: {exc}") from exc
+        raise DeploymentError(
+            f"{source}: not valid YAML: {_yaml_problem(exc)}"
+        ) from exc
     if not isinstance(raw, dict):
         raise DeploymentError(f"{source}: expected a mapping at the top level")
     version = raw.get("schema_version")
@@ -175,6 +199,11 @@ def _parse(text: str, source: Path) -> Deployment:
     base = source.parent
     declared = str(raw.get("root") or ".")
     remote = not _on_this_host(str(source))
+    if remote and _names_environment(declared):
+        raise DeploymentError(
+            f"{source}: root {declared!r} names this host's environment; a remote "
+            f"deployment's root is taken as written, relative to its folder or a URI"
+        )
     if remote and _looks_local(declared):
         raise DeploymentError(
             f"{source}: root {declared!r} is a local path; a remote deployment's "
