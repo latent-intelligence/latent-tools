@@ -9,6 +9,8 @@ description = "A standalone MCP server over a published latent-wiki store — re
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Latent Intelligence" }]
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "pyyaml>=6.0",
     "typer>=0.16",
@@ -31,4 +33,4 @@ latent-wiki-mcp = "latent_wiki_mcp.cli:app"
 packages = ["src/latent_wiki_mcp"]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["src", "tests", "README.md", "pyproject.toml"]
+only-include = ["src", "tests", "README.md", "LICENSE", "pyproject.toml"]

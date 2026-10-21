@@ -9,6 +9,8 @@ description = "A standalone MCP server over a published latent-records store —
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Latent Intelligence" }]
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     "lancedb>=0.39,<0.40",
     "pyarrow>=18.0",
@@ -38,4 +40,4 @@ latent-records-mcp = "latent_records_mcp.cli:app"
 packages = ["src/latent_records_mcp"]
 
 [tool.hatch.build.targets.sdist]
-only-include = ["src", "tests", "README.md", "pyproject.toml"]
+only-include = ["src", "tests", "README.md", "LICENSE", "pyproject.toml"]
