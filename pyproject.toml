@@ -29,7 +29,7 @@ select = ["E", "F", "I", "B", "UP", "SIM"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["wiki-mcp/src", "tests"]
+files = ["wiki-mcp/src", "tests", "scripts"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "wiki-mcp/tests"]

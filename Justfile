@@ -9,7 +9,7 @@ default:
 
 # Install every member and the dev tools.
 install:
-    uv sync --all-packages
+    uv sync --all-packages --all-extras
 
 # Update the lockfile.
 lock:
