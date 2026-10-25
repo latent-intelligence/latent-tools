@@ -1,6 +1,6 @@
 """Exceptions raised by latent-wiki-mcp.
 
-Trimmed from latent-wiki's `errors.py` (991549f) to the three the server raises, under
+Trimmed from latent-wiki's `errors.py` (28db78d) to the three the server raises, under
 the same names, so the copied reader raises what it always raised.
 """
 

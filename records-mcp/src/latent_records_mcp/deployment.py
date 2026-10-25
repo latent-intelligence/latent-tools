@@ -16,7 +16,7 @@ refused rather than expanded with this host's environment, since no other host's
 could be meant, and a value expanded here could carry this process's secrets into a
 request path.
 
-Adapted from latent-records' `deployment.py` (b7ca93c): the same refusals, fewer keys,
+Adapted from latent-records' `deployment.py` (5a75235): the same refusals, fewer keys,
 plus the constants the copied `search`, `store_json` and `embedders` modules import.
 """
 
@@ -117,13 +117,18 @@ def _names_environment(value: str) -> bool:
 
 def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
     """A path from the declaration: a URI as given, anything else against the file."""
-    expanded = os.path.expandvars(os.path.expanduser(value)) if expand else value
+    expanded = _expand(value) if expand else value
     if expand and "$" in expanded:
         raise DeploymentError(f"{value!r} names an environment variable that is unset")
     if "://" in expanded:
         return _upath(expanded)
     path = Path(expanded)
     return (path if path.is_absolute() else base / path).resolve()
+
+
+def _expand(value: str) -> str:
+    """Variables first, then ``~``, so a ``~`` a variable holds is expanded too."""
+    return os.path.expanduser(os.path.expandvars(value))
 
 
 def _upath(uri: str) -> Path:

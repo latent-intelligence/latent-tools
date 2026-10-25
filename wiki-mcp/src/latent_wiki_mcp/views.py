@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 991549f, below this header:
+# Verbatim copy of latent-wiki at 28db78d, below this header:
 #   src/latent_wiki/views.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 

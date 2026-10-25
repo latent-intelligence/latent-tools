@@ -7,13 +7,13 @@ the same footers and `cut:` lines, with nothing of the store package installed.
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp"
 ```
 
 For a deployment in a bucket, add the `s3` extra:
 
 ```bash
-uv tool install "latent-wiki-mcp[s3] @ git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp"
+uv tool install "latent-wiki-mcp[s3] @ git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.
@@ -23,15 +23,15 @@ To move to a new release, run the line with the new tag; the tool is replaced wi
 ```bash
 latent-wiki-mcp --deployment <folder>                 # stdio: what a client starts
 latent-wiki-mcp --deployment <folder> --print-config  # the mcpServers block to paste in
-claude mcp add design -- latent-wiki-mcp --deployment <folder>
+claude mcp add heronsgate -- latent-wiki-mcp --deployment <folder>
 ```
 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
 fsspec opens (`s3://…/deployments/<name>`). The server reads the declaration's `schema_version`,
 `name` and `root:` and serves `<root>/wiki` with `<root>/context`; a remote declaration's root
 is taken as written; one that needs this host's environment (`~`, `$VAR`) or its disk (an
-absolute path) is refused. It refuses a name, an unpublished
-store, and a remote declaration whose root is a local path.
+absolute path) is refused. It refuses a name, a `name:` that differs from the folder's, an
+unpublished store, and a remote declaration whose root is a local path.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a bearer
 token in `$LATENT_WIKI_SERVE_TOKEN`, unless `--insecure-local` is given with a loopback host.
@@ -43,7 +43,7 @@ token in `$LATENT_WIKI_SERVE_TOKEN`, unless `--insecure-local` is given with a l
 latent-wiki's, each naming the source commit in its first line; `deployment.py` and `cli.py`
 are adapted from it. The copy is synced from the store, never edited here; `CHANGELOG.md`
 names the commit each release carries. The tool contract, the store format and their
-fixtures are latent-wiki's (`docs/formats/wiki-tools.md`, `wiki-store.md`, `context-store.md`
+fixtures are latent-wiki's (`docs/contracts/wiki-tools.md`, `wiki-store.md`, `context-store.md`
 there); the fixtures under `tests/fixtures/formats/` are copies with invented names.
 
 This server and `latent-wiki serve` give the same answers; the workspace's `just conform`

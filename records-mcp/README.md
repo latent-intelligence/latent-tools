@@ -7,7 +7,7 @@ object storage. It answers latent-records' `records-tools` contract: `describe`,
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.0#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.1#subdirectory=records-mcp"
 ```
 
 Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `text`
@@ -15,7 +15,7 @@ Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `
 whose space needs a model you did not install says so on the first search.
 
 ```bash
-uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.0#subdirectory=records-mcp"
+uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.1#subdirectory=records-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.
@@ -30,8 +30,9 @@ claude mcp add hives -- latent-records-mcp --deployment <folder> --warm
 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
 fsspec opens. The server reads the declaration's `schema_version`, `name` and `root:` and
-serves `<root>/store`, which must carry a stamped `store.json` with a `store_id`; a remote
-declaration's root is taken as written; one that needs this host's environment (`~`, `$VAR`)
+serves `<root>/store`, which must carry a stamped `store.json` with a `store_id`. A local
+declaration's root expands `$VAR` and then `~`, so a variable holding `~` resolves under home;
+a remote declaration's root is taken as written; one that needs this host's environment (`~`, `$VAR`)
 or its disk (an absolute path) is refused. `--warm` loads
 every space's model in the background at start.
 
@@ -46,7 +47,7 @@ loopback host.
 commit in its first line; `store.py` (the read half), `deployment.py` and `cli.py` are adapted
 from it. The copy is synced from the store, never edited here; `CHANGELOG.md` names the
 commit each release carries. The tool contract and the store format are latent-records'
-(`docs/formats/records-tools.md` and `store.md` there). The fixture under
+(`docs/contracts/records-tools.md` and `store.md` there). The fixture under
 `tests/fixtures/deployments/` is a small store built from latent-records' own fixture
 deployment with its test embedder, by `scripts/fixture_store.py`.
 

@@ -267,6 +267,19 @@ def test_a_remote_root_is_never_expanded_with_this_environment(
         assert "sekrit" not in result.output
 
 
+def test_a_name_that_differs_from_the_folder_is_refused(deployment: Path) -> None:
+    _declare(str(deployment), "schema_version: 1\nname: survey-other\n")
+    result = _run("--deployment", str(deployment), "--print-config")
+    _one_line_refusal(result, "file's name")
+
+
+def test_a_name_that_restates_the_folder_s_serves(deployment: Path) -> None:
+    from latent_wiki_mcp.deployment import load_deployment_folder
+
+    _declare(str(deployment), "schema_version: 1\nname: survey\n")
+    assert load_deployment_folder(str(deployment)).name == "survey"
+
+
 def test_an_unknown_schema_version_is_refused(deployment: Path) -> None:
     _declare(str(deployment), "schema_version: 2\nwiki: {config: wiki.yaml}\n")
     _one_line_refusal(_run("--deployment", str(deployment)), "schema_version 2")

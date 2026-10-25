@@ -5,7 +5,7 @@ same options, the same refusals and the same token variable, so a client configu
 one runs the other. Nothing but the protocol reaches stdout on stdio; diagnostics go to
 stderr.
 
-Adapted from latent-wiki's `cli/serve.py` (991549f).
+Adapted from latent-wiki's `cli/serve.py` (28db78d).
 """
 
 from __future__ import annotations

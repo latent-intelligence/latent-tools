@@ -155,3 +155,101 @@ async def test_a_websocket_is_refused_too() -> None:
 
     await app({"type": "websocket", "headers": []}, None, send)
     assert sent == [{"type": "websocket.close", "code": 1008}]
+
+
+def _second_store(tmp_path: Path) -> WikiReader:
+    """The format fixture as another store: its own id, and periwinkles where the
+    first counts limpets. `tide-pool` keeps its key in both, with different text."""
+    root = tmp_path / "second"
+    shutil.copytree(FORMATS / "wiki-store", root / "wiki")
+    shutil.copytree(FORMATS / "context-store", root / "context")
+    swaps = {
+        "heronsgate": "saltmarsh",
+        "Heronsgate": "Saltmarsh",
+        "limpet": "periwinkle",
+        "water left behind": "brine left behind",
+    }
+    for path in [p for p in root.rglob("*") if p.is_file()]:
+        text = path.read_text()
+        for old, new in swaps.items():
+            text = text.replace(old, new)
+        path.write_text(text)
+    pages = root / "wiki" / "pages"
+    (pages / "count-limpets.md").rename(pages / "count-periwinkles.md")
+    return WikiReader(str(root / "wiki"), context=str(root / "context"))
+
+
+async def test_two_stores_served_at_once_each_answer_from_their_own(
+    reader: WikiReader, tmp_path: Path
+) -> None:
+    """Two servers in one process, both connected, called concurrently: each answers
+    from its own pages and its own context store, under its own name, even for a key
+    both stores share."""
+    import anyio
+    from mcp import Client
+
+    second = _second_store(tmp_path)
+    calls = [
+        ("wiki_search", {"query": "limpets"}),
+        ("wiki_search", {"query": "periwinkles"}),
+        ("wiki_get", {"key": "tide-pool"}),
+        ("wiki_evidence", {"key": "tide-pool"}),
+        ("wiki_raw", {"key": "kelpmoor-ch01-pools"}),
+    ]
+    answers: dict[str, dict[str, str]] = {"heronsgate": {}, "saltmarsh": {}}
+    resources: dict[str, set[str]] = {}
+    pages: dict[str, str] = {}
+
+    async with (
+        Client(build_server(reader)) as first_client,
+        Client(build_server(second)) as second_client,
+    ):
+        clients = {"heronsgate": first_client, "saltmarsh": second_client}
+        assert {n: c.server_info.name for n, c in clients.items()} == {
+            "heronsgate": "heronsgate",
+            "saltmarsh": "saltmarsh",
+        }
+
+        async def ask(store: str, name: str, arguments: dict[str, Any]) -> None:
+            result = await clients[store].call_tool(name, arguments)
+            assert not result.is_error
+            answers[store][f"{name} {arguments}"] = result.content[0].text
+
+        async def browse(store: str) -> None:
+            listed = await clients[store].list_resources()
+            resources[store] = {str(r.uri) for r in listed.resources}
+            read = await clients[store].read_resource("tide-pool")
+            pages[store] = read.contents[0].text
+
+        async with anyio.create_task_group() as group:
+            for name, arguments in calls:
+                for store in clients:
+                    group.start_soon(ask, store, name, arguments)
+            for store in clients:
+                group.start_soon(browse, store)
+
+    first, other = answers["heronsgate"], answers["saltmarsh"]
+    for name, arguments in calls:
+        asked = f"{name} {arguments}"
+        assert first[asked] == reader.call(name, arguments)
+        assert other[asked] == second.call(name, arguments)
+    assert "heronsgate:count-limpets" in first["wiki_search {'query': 'limpets'}"]
+    assert "saltmarsh" not in first["wiki_search {'query': 'limpets'}"]
+    assert "count-periwinkles" not in first["wiki_search {'query': 'periwinkles'}"]
+    assert (
+        "saltmarsh:count-periwinkles" in other["wiki_search {'query': 'periwinkles'}"]
+    )
+    assert "count-limpets" not in other["wiki_search {'query': 'limpets'}"]
+    assert "water left behind" in first["wiki_get {'key': 'tide-pool'}"]
+    assert "brine left behind" in other["wiki_get {'key': 'tide-pool'}"]
+    assert "limpet" in first["wiki_evidence {'key': 'tide-pool'}"]
+    assert "periwinkle" in other["wiki_evidence {'key': 'tide-pool'}"]
+    assert "limpet" not in other["wiki_evidence {'key': 'tide-pool'}"]
+    assert "Count the limpets" in first["wiki_raw {'key': 'kelpmoor-ch01-pools'}"]
+    assert "Count the periwinkles" in other["wiki_raw {'key': 'kelpmoor-ch01-pools'}"]
+    assert resources == {
+        "heronsgate": {"tide-pool", "count-limpets"},
+        "saltmarsh": {"tide-pool", "count-periwinkles"},
+    }
+    assert "water left behind" in pages["heronsgate"]
+    assert "brine left behind" in pages["saltmarsh"]

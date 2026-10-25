@@ -1,12 +1,12 @@
-# Verbatim copy of latent-records at b7ca93c, below this header:
+# Verbatim copy of latent-records at 5a75235, below this header:
 #   src/latent_records/formats.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The formats this package publishes — names and versions, in one place.
 
-Each is specified in `docs/formats/` with a JSON Schema in `schemas/`. A reader refuses
-a version it does not know and a missing stamp; this
-module is what the writer stamps and what this package's own reader checks against.
+Each is specified in `docs/contracts/` with a JSON Schema in `schemas/`. A reader
+refuses a version it does not know and a missing stamp; this module is what the writer
+stamps and what this package's own reader checks against.
 """
 
 from __future__ import annotations

@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at b7ca93c, below this header:
+# Verbatim copy of latent-records at 5a75235, below this header:
 #   src/latent_records/schema.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -6,7 +6,7 @@
 
 Every table carries the format stamp in its schema metadata, so a Lance table copied
 out of its store still says what it is. Required columns are listed in
-`docs/formats/store.md`; adding an optional column is not a breaking change.
+`docs/contracts/store.md`; adding an optional column is not a breaking change.
 """
 
 from __future__ import annotations
