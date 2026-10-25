@@ -36,4 +36,4 @@ scripts/smoke.py    the clean-environment install
 uv, ruff, mypy strict, pytest, hatchling, Python 3.11+. One `mcp` pin, `mcp>=2.0,<3`, in every
 member. Branches, never `main`; one-line commits `[type]: summary`; gitleaks pre-commit hooks.
 A release is one commit bumping the member's version and its `CHANGELOG.md`, then an annotated tag
-`<member>-v<version>`.
+`<member>-v<version>`. Related releases may share one squash-merged commit, each with its own tag.
