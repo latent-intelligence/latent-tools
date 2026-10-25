@@ -21,8 +21,9 @@ Adapted from latent-records' `deployment.py` (5a75235), plus the constants the c
 refuses less: it serves a declaration the store refuses for lacking `store_id` or
 inputs, or for a key the store does not know. It refuses a name, a folder without a
 declaration, a `schema_version` it does not know, a `name:` that differs from the
-folder's, a case-variant of `root`, and a remote root that needs this host's environment
-or disk, some of these in other words than the store's.
+folder's, a case-variant of `root`, a remote root that needs this host's environment or
+disk, a local root naming an unset variable, and a URI scheme this install cannot open,
+some of these in other words than the store's.
 """
 
 from __future__ import annotations

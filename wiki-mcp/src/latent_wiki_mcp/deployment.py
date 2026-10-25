@@ -20,8 +20,9 @@ Adapted from latent-wiki's `deployment.py` (28db78d), reading fewer keys and so
 refusing less: it serves a declaration the store refuses for lacking `wiki:` or for a
 key the store does not know. It refuses a name, a folder without a declaration, a
 `schema_version` it does not know, a `name:` that differs from the folder's, a
-case-variant of `root`, a remote root that needs this host's environment or disk, and a
-wiki store's own folder given in place of its deployment's.
+case-variant of `root`, a remote root that needs this host's environment or disk, a
+URI scheme this install cannot open, and a wiki store's own folder given in place of its
+deployment's.
 """
 
 from __future__ import annotations

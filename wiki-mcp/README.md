@@ -40,16 +40,16 @@ folder's, a store's own `wiki/` folder in place of its deployment's, an unpublis
 and a remote declaration whose root is a local path.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a bearer
-token in `$LATENT_WIKI_SERVE_TOKEN`, unless `--insecure-local` is given with a loopback host: exactly `127.0.0.1`, `localhost` or
-`::1`.
+token in `$LATENT_WIKI_SERVE_TOKEN`, unless `--insecure-local` is given with a loopback host: exactly `127.0.0.1`,
+`localhost` or `::1`.
 `--index-body` ranks over page bodies too.
 
 ## What it is made of
 
 `reader.py`, `_fts.py`, `views.py`, `formats.py` and `serve.py` are verbatim copies of
-latent-wiki's, each naming the source commit in its first line; `manifest.py`, `core.py` and
-`errors.py` are trimmed to what the reader imports, each naming its source and commit;
-`deployment.py` and `cli.py` are adapted from it. The copy is synced from the store, never edited here; `CHANGELOG.md`
+latent-wiki's, each naming the source commit in its first line; `manifest.py`, `core.py`
+and `errors.py` are trimmed to what the reader imports, each naming its source and
+commit; `deployment.py` and `cli.py` are adapted from it. The copy is synced from the store, never edited here; `CHANGELOG.md`
 names the commit each release carries. The tool contract, the store format and their
 fixtures are latent-wiki's (`docs/contracts/wiki-tools.md`, `wiki-store.md`, `context-store.md`
 there); the fixtures under `tests/fixtures/formats/` are copies with invented names.

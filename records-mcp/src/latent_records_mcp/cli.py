@@ -159,7 +159,7 @@ def _launcher() -> list[str]:
 
 UV_CACHE_WARNING = (
     "this command runs from uv's cache, as uvx runs it, and the block names that path: "
-    "`uv cache clean` or a new release removes it. Install the tool with `uv tool "
+    "`uv cache clean` or `uv cache prune` removes it. Install the tool with `uv tool "
     "install` (README) and print the config again."
 )
 
