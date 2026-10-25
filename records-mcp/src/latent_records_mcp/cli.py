@@ -103,10 +103,6 @@ def main(
     if transport == "http":
         host = serving.bare_host(host)
     if transport == "http" and (
-        problem := _refuse_insecure_host(token, host, insecure_local)
-    ):
-        fail(LatentRecordsError(problem))
-    if transport == "http" and (
         problem := serving.refuse_http(token, TOKEN_ENV, host, insecure_local)
     ):
         fail(LatentRecordsError(problem))
@@ -170,17 +166,6 @@ UV_CACHE_WARNING = (
 def _in_uv_cache(command: str) -> bool:
     """Whether a command runs from uv's cache, where `uvx` puts a tool it runs."""
     return any(part.startswith("archive-v") for part in Path(command).parts)
-
-
-def _refuse_insecure_host(token: str | None, host: str, insecure_local: bool) -> str:
-    """Why `--insecure-local` may not serve this host, or "" when it may or a token
-    is set. The loopback list is exact, as the store's is: 127.0.0.2 is not on it."""
-    if token or not insecure_local or host in serving.LOOPBACK:
-        return ""
-    return (
-        f"{host!r} is not a loopback host: --insecure-local takes exactly "
-        f"{', '.join(serving.LOOPBACK)}. Use one of those, or set ${TOKEN_ENV}."
-    )
 
 
 if __name__ == "__main__":

@@ -101,15 +101,18 @@ def test_insecure_local_is_for_a_loopback_host_only(folder: Path) -> None:
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2"])
-def test_insecure_local_names_the_host_and_says_the_list_is_exact(
+def test_insecure_local_names_the_host_as_the_store_does(
     folder: Path, host: str
 ) -> None:
     result = _run(
         "--deployment", str(folder), "--transport", "http",
         "--host", host, "--insecure-local", "--print-config",
     )  # fmt: skip
-    _one_line_refusal(result, f"{host!r} is not a loopback host")
-    assert "exactly" in result.output
+    _one_line_refusal(
+        result,
+        f"refusing HTTP without a token: {host!r} is not a loopback host, and "
+        "--insecure-local takes only 127.0.0.1, localhost, ::1.",
+    )
 
 
 def test_a_token_still_serves_any_host_with_insecure_local(
