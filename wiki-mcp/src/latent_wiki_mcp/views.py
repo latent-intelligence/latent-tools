@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 28db78d, below this header:
+# Verbatim copy of latent-wiki at 45b3974, below this header:
 #   src/latent_wiki/views.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -19,6 +19,10 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
+
+
+class NoNode(LookupError):
+    """A view asked for a root the tree does not hold."""
 
 
 @dataclass(frozen=True)
@@ -129,18 +133,21 @@ def render(
     named: Callable[[str], str] = str,
 ) -> tuple[str, str]:
     """The tree as indented text — one root by key, or all of them — and what was cut.
-    `named` is how a page's key is printed.
+    `named` is how a page's key is printed. A `root` the tree does not hold raises
+    `NoNode`.
 
     Capped twice: the tree at `MAX_LINES`, and each trailing list at `MAX_NAMES`, so a
-    wrong `root_type` over a large store cannot return every key in one line.
+    wrong `root_type` over a large store cannot return every key in one line. Pages
+    `depth` hides are counted in the cut.
     """
     chosen = [r for r in tree.roots if not root or r.key == root]
     if root and not chosen:
         found = _find(tree.roots, root)
         chosen = [found] if found else []
     if root and not chosen:
-        return f"no node '{root}' in view '{tree.view.name}'", ""
+        raise NoNode(f"no node {root!r} in view {tree.view.name!r}")
     lines: list[str] = []
+    hidden: set[str] = set()
 
     seen: set[str] = set()
 
@@ -158,6 +165,7 @@ def render(
         if depth and level + 1 >= depth:
             if node.children:
                 lines.append(f"{'  ' * (level + 1)}… {len(node.children)} beneath")
+                _beneath(node, hidden, seen)
             return
         for child in node.children:
             walk(child, level + 1)
@@ -165,6 +173,9 @@ def render(
     for node in chosen:
         walk(node, 0)
     cuts = []
+    if hidden:
+        pages = "page" if len(hidden) == 1 else "pages"
+        cuts.append(f"{len(hidden)} {pages} below depth {depth}; depth=0 for all")
     if len(lines) > MAX_LINES:
         cuts.append(f"{MAX_LINES} of {len(lines)} lines; pass root=<key> or depth=<n>")
         lines = lines[:MAX_LINES]
@@ -184,6 +195,14 @@ def render(
         if more > 0:
             cuts.append(f"{label}: {MAX_NAMES} of {len(names)} named")
     return "\n".join(lines) + "\n".join(tail), "; ".join(cuts)
+
+
+def _beneath(node: Node, hidden: set[str], shown: set[str]) -> None:
+    """Every page under `node` into `hidden`, once each, cycles included."""
+    for child in node.children:
+        if child.key not in hidden and child.key not in shown:
+            hidden.add(child.key)
+            _beneath(child, hidden, shown)
 
 
 def _find(nodes: list[Node], key: str) -> Node | None:

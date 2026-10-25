@@ -7,7 +7,7 @@ serves some declarations the store refuses; `deployment.py` says what it reads a
 refuses. Nothing but the protocol reaches stdout on stdio; diagnostics go to
 stderr.
 
-Adapted from latent-wiki's `cli/serve.py` (28db78d).
+Adapted from latent-wiki's `cli/serve.py` (45b3974).
 """
 
 from __future__ import annotations

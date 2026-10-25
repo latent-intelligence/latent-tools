@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 5a75235, below this header:
+# Verbatim copy of latent-records at e9eb62a, below this header:
 #   src/latent_records/embedders/open_clip.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -7,15 +7,31 @@
 from __future__ import annotations
 
 import io
+import os
 from collections.abc import Sequence
 from typing import Any
 
 import numpy as np
 
 from ..errors import EmbedderError
-from .base import normalise
+from .base import Download, hub_download, normalise
 
 BATCH = 64
+
+#: The file open_clip fetches when a hub entry names only the repo.
+HUB_WEIGHTS = "open_clip_pytorch_model.bin"
+
+
+def download(model: str, pretrained: str) -> Download | None:
+    """What loading `model`/`pretrained` would fetch from the hub. Weights open_clip
+    fetches from a plain URL, or reads from a file, are not announced."""
+    import open_clip
+
+    hub = open_clip.get_pretrained_cfg(model, pretrained).get("hf_hub", "")
+    if not hub:
+        return None
+    repo, weights = os.path.split(hub)
+    return hub_download(repo, None, (weights or HUB_WEIGHTS,))
 
 
 class OpenClipEmbedder:

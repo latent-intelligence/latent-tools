@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "latent-wiki-mcp"
-version = "0.1.1"
+version = "0.1.2"
 description = "A standalone MCP server over a published latent-wiki store — read-only, local or s3://."
 readme = "README.md"
 requires-python = ">=3.11"

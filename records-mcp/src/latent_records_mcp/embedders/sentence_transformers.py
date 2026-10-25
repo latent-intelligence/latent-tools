@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 5a75235, below this header:
+# Verbatim copy of latent-records at e9eb62a, below this header:
 #   src/latent_records/embedders/sentence_transformers.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -6,18 +6,31 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Sequence
 
 import numpy as np
 
 from ..errors import EmbedderError
-from .base import normalise
+from .base import Download, hub_download, normalise
 
 BATCH = 64
 
 TOKEN_BUDGET = 16_384
 
 MAX_PLAUSIBLE_LENGTH = 1_000_000
+
+#: The weights a model loads, in the order the library looks for them.
+WEIGHTS = ("model.safetensors", "pytorch_model.bin")
+
+
+def download(model: str, revision: str | None) -> Download | None:
+    """What loading `model` would fetch from the hub. A bare name is looked up under
+    `sentence-transformers/`, as the library looks it up; a folder fetches nothing."""
+    if os.path.isdir(model):
+        return None
+    repo = model if "/" in model else f"sentence-transformers/{model}"
+    return hub_download(repo, revision, WEIGHTS)
 
 
 class SentenceTransformerEmbedder:

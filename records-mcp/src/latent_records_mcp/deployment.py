@@ -16,7 +16,7 @@ refused rather than expanded with this host's environment, since no other host's
 could be meant, and a value expanded here could carry this process's secrets into a
 request path.
 
-Adapted from latent-records' `deployment.py` (5a75235), plus the constants the copied
+Adapted from latent-records' `deployment.py` (e9eb62a), plus the constants the copied
 `search`, `store_json` and `embedders` modules import. It reads fewer keys and so
 refuses less: it serves a declaration the store refuses for lacking `store_id` or
 inputs, or for a key the store does not know. It refuses a name, a folder without a
@@ -99,6 +99,8 @@ class Deployment:
     name: str
     path: Path
     root: Path
+    declared_root: str = "."
+    """``root:`` as written, before its variables were expanded."""
 
     @property
     def store_dir(self) -> Path:
@@ -130,6 +132,17 @@ def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
         return _upath(expanded)
     path = Path(expanded)
     return (path if path.is_absolute() else base / path).resolve()
+
+
+#: A variable as `os.path.expandvars` reads one: ``$NAME`` or ``${NAME}``.
+VARIABLE = re.compile(r"\$(\w+|\{[^}]*\})")
+
+
+def root_variables(deployment: Deployment) -> list[str]:
+    """The variables the declaration's ``root:`` names, once each: what a process
+    started with another environment needs to find the same root."""
+    names = (n.strip("{}") for n in VARIABLE.findall(deployment.declared_root))
+    return list(dict.fromkeys(names))
 
 
 def _expand(value: str) -> str:
@@ -267,5 +280,8 @@ def _parse(text: str, source: Path) -> Deployment:
             f"root is relative to its folder, or a remote URI"
         )
     return Deployment(
-        name=name, path=source, root=resolve_location(declared, base, expand=not remote)
+        name=name,
+        path=source,
+        root=resolve_location(declared, base, expand=not remote),
+        declared_root=declared,
     )

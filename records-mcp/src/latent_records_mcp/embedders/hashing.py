@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 5a75235, below this header:
+# Verbatim copy of latent-records at e9eb62a, below this header:
 #   src/latent_records/embedders/hashing.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 

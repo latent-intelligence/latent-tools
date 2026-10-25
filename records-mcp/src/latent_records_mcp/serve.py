@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 5a75235, below this header:
+# Verbatim copy of latent-records at e9eb62a, below this header:
 #   src/latent_records/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -18,6 +18,12 @@ neither was returned. Arguments take a key bare or with the prefix.
 **HTTP requires a token,** read from the environment and compared in constant time on
 every request. HTTP without one is refused unless the operator passes
 ``--insecure-local`` and the host is loopback.
+
+**A refusal is one line,** the SDK's own argument checks included, and a scope that
+would match nothing (a record not in the store, an empty query) is refused rather than
+answered with nothing. With several spaces over a target, the client is told which to
+start with: the first by name that takes a text query, preferring one this install
+can load.
 """
 
 from __future__ import annotations
@@ -27,11 +33,14 @@ import inspect
 import json
 import logging
 import threading
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from typing import Any, cast
 
+from . import __version__
 from .backends.base import Eq
-from .embedders.base import load_embedder
+from .deployment import TARGETS
+from .embedders.base import load_embedder, missing_install
 from .errors import FormatError
 from .search import MODES, PRESENCE_TABLES, Hit, Mode
 from .store import Store
@@ -49,6 +58,9 @@ DESCRIPTION_MAX = 280
 
 #: Hosts only this machine can reach: the one place HTTP may run without a token.
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
+
+#: How much of a wrong argument a refusal quotes.
+QUOTED_MAX = 80
 
 MODELS = threading.Lock()
 
@@ -124,25 +136,78 @@ def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
     }
 
 
+def covering(spaces: Mapping[str, Any], target: str) -> list[str]:
+    """The spaces with vectors for a target, by name."""
+    return sorted(n for n, s in spaces.items() if target in (s.get("targets") or {}))
+
+
+def recommended(spaces: Mapping[str, Any]) -> dict[str, str]:
+    """Per target, the space to start a search in: the first by name that takes a
+    text query, preferring one this install can load."""
+    chosen: dict[str, str] = {}
+    for target in TARGETS:
+        text = [
+            n
+            for n in covering(spaces, target)
+            if "text" in (spaces[n].get("query_modalities") or [])
+        ]
+        if text:
+            usable = [n for n in text if missing_install(spaces[n]) is None]
+            chosen[target] = (usable or text)[0]
+    return chosen
+
+
 def describe(store: Store) -> dict[str, Any]:
     status = store.status()
+    spaces: dict[str, Any] = {}
+    for name, entry in sorted(store.spaces.items()):
+        install = missing_install(entry)
+        spaces[name] = {
+            "embedder": entry.get("embedder"),
+            "model": entry.get("model"),
+            "targets": sorted(entry.get("targets") or {}),
+            "query_modalities": entry.get("query_modalities", []),
+            "queryable": install is None,
+            "install": install,
+        }
     return {
         "store_id": store.store_id,
         "title": status.title,
         "generated": status.generated,
         "rows": status.tables,
-        "spaces": {
-            name: {
-                "embedder": entry.get("embedder"),
-                "model": entry.get("model"),
-                "targets": sorted(entry.get("targets") or {}),
-                "query_modalities": entry.get("query_modalities", []),
-            }
-            for name, entry in sorted(store.spaces.items())
-        },
+        "spaces": spaces,
+        "recommended": recommended(store.spaces),
         "modes": list(MODES),
         "contains_tables": list(PRESENCE_TABLES),
     }
+
+
+def guidance(store: Store) -> str:
+    """The lines the server's instructions add for this store's spaces."""
+    lines = []
+    if picks := recommended(store.spaces):
+        named = "; ".join(f"{target}: {space}" for target, space in picks.items())
+        lines.append(f"Start `search` in the recommended space per target: {named}.")
+    if unusable := {
+        name: install
+        for name, entry in sorted(store.spaces.items())
+        if (install := missing_install(entry))
+    }:
+        lines.append(
+            "This install cannot query "
+            + ", ".join(f"{n} (install {i})" for n, i in unusable.items())
+            + "."
+        )
+    return "".join(f"\n{line}" for line in lines)
+
+
+def _invalid(error: Mapping[str, Any]) -> str:
+    """One argument check the SDK failed, as a clause: where, what, and what came."""
+    where = ".".join(str(part) for part in error["loc"])
+    said = f"{where}: {error['msg']}"
+    if error["type"] == "missing":
+        return said
+    return f"{said} (given {_cut(repr(error['input']), QUOTED_MAX)})"
 
 
 def _described(store: Store, listed: int, total: int) -> dict[str, Any]:
@@ -256,9 +321,10 @@ def build_server(store: Store) -> Any:
     discards extras, so a misspelled filter would otherwise return results the caller
     believes were filtered."""
     from mcp.server import MCPServer
-    from mcp.server.mcpserver.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
     from mcp.server.mcpserver.resources import FunctionResource
     from mcp.types import ToolAnnotations
+    from pydantic import ValidationError
 
     store_id = store_id_of(store)
     keys = Keys(store_id)
@@ -266,6 +332,7 @@ def build_server(store: Store) -> Any:
     instructions = f"{store.title or 'A latent-records store'}.\n" + (
         INSTRUCTIONS.format(store_id=store_id)
     )
+    instructions += guidance(store)
     if len(records) < total:
         instructions += (
             f"\nResources list {len(records)} of {total} records, by id; "
@@ -284,9 +351,21 @@ def build_server(store: Store) -> Any:
                 # %r: an argument name is caller data, and a refusal is one line.
                 names = ", ".join(repr(u) for u in unknown)
                 raise ToolError(f"{name} has no {names}; it takes {takes}")
-            return await super().call_tool(name, arguments, context)
+            try:
+                return await super().call_tool(name, arguments, context)
+            except ToolError as exc:
+                # The SDK's own argument check: several lines and a link, rephrased.
+                # Kept caused by the validation, so the SDK logs field names only.
+                cause = exc.__cause__
+                if isinstance(exc, UnexpectedToolError) or not isinstance(
+                    cause, ValidationError
+                ):
+                    raise
+                raise ToolError(
+                    f"{name}: " + "; ".join(_invalid(e) for e in cause.errors())
+                ) from cause
 
-    server = Server(store_id, instructions=instructions)
+    server = Server(store_id, instructions=instructions, version=__version__)
     for record_id, title, description in records:
         server.add_resource(
             FunctionResource.from_function(
@@ -308,6 +387,24 @@ def build_server(store: Store) -> Any:
             raise
         except Exception as exc:
             raise ToolError(str(exc) or type(exc).__name__) from exc
+
+    def scope(record_id: str | None) -> str | None:
+        """The record a call is scoped to, bare; one not in the store is refused,
+        since a scope that matches nothing would read as an answer."""
+        if not record_id:
+            return None
+        bare = keys.read(record_id)
+        found = guarded(
+            lambda: (
+                "records" in store.backend.table_names()
+                and store.backend.read(
+                    "records", columns=["record_id"], where=Eq("record_id", bare)
+                ).num_rows
+            )
+        )
+        if not found:
+            raise ToolError(f"no record {bare!r} in {store_id}")
+        return bare
 
     @server.tool(name="describe", annotations=read_only)
     def describe_tool() -> str:
@@ -331,6 +428,20 @@ def build_server(store: Store) -> Any:
             raise ToolError(f"mode must be one of {list(MODES)}")
         if not 1 <= limit <= MAX_LIMIT:
             raise ToolError(f"limit must be between 1 and {MAX_LIMIT}")
+        if not query.strip():
+            raise ToolError("give a query: words to rank by")
+        # Images take vector search only; search says so before choosing a space.
+        image = target in TARGETS and TARGETS[target][0] == "image"
+        if not space and (mode == "vector" or (mode == "hybrid" and not image)):
+            several = covering(store.spaces, target)
+            if len(several) > 1:
+                start = recommended(store.spaces).get(target)
+                such = f", such as {start!r}, the recommended one" if start else ""
+                raise ToolError(
+                    f"several spaces cover {target}: {several}; name one with "
+                    f"`space`{such}"
+                )
+        within = scope(record_id)
 
         def ranked() -> list[Hit]:
             with MODELS:
@@ -340,7 +451,7 @@ def build_server(store: Store) -> Any:
                     space=space or None,
                     mode=cast(Mode, mode),
                     limit=limit,
-                    record_id=keys.read(record_id) if record_id else None,
+                    record_id=within,
                     expand_refs=expand_refs,
                 )
 
@@ -358,11 +469,10 @@ def build_server(store: Store) -> Any:
     ) -> str:
         """Whether a phrase occurs, exactly (whole words, in order, any case), and
         where. total 0 means it does not occur."""
+        within = scope(record_id)
         found = guarded(
             lambda: store.contains(
-                phrase,
-                tables=tables or PRESENCE_TABLES,
-                record_id=keys.read(record_id) if record_id else None,
+                phrase, tables=tables or PRESENCE_TABLES, record_id=within
             )
         )
         return json.dumps(
@@ -408,12 +518,16 @@ def client_config(
     port: int,
     token_env: str,
     token: bool,
+    variables: Sequence[str] = (),
 ) -> dict[str, Any]:
     """The `mcpServers` block a client pastes in, for a store that has just opened.
 
     `argv` is the stdio command, its paths resolved so a client starting elsewhere
-    finds them. HTTP carries the token as `${VAR}`, never its value, whenever one is
-    set, since the server then checks it; none at all when it runs without one.
+    finds them. `variables` are the ones that command reads, such as those a
+    declaration's root names: the stdio block lists them in `env` as `${VAR}`, for a
+    client that expands them from its own environment. HTTP carries the token the same
+    way whenever one is set, since the server then checks it; none at all when it runs
+    without one. No value is written: a client's configuration is often committed.
     """
     entry: dict[str, Any]
     if transport == "http":
@@ -423,6 +537,8 @@ def client_config(
             entry["headers"] = {"Authorization": f"Bearer ${{{token_env}}}"}
     else:
         entry = {"command": argv[0], "args": argv[1:]}
+        if variables:
+            entry["env"] = {name: f"${{{name}}}" for name in variables}
     return {"mcpServers": {f"records-{store_id_of(store)}": entry}}
 
 
@@ -460,12 +576,23 @@ class BearerCheck:
         await send({"type": "http.response.body", "body": b"unauthorized"})
 
 
+def bare_host(host: str) -> str:
+    """A host as a socket takes it: an IPv6 address without the brackets of a URL."""
+    return host[1:-1] if host.startswith("[") and host.endswith("]") else host
+
+
 def refuse_http(
     token: str | None, variable: str, host: str, insecure_local: bool
 ) -> str:
     """Why HTTP may not start as asked, or "" when it may. Checked before opening."""
-    if token or (insecure_local and host in LOOPBACK):
+    if token or (insecure_local and bare_host(host) in LOOPBACK):
         return ""
+    if insecure_local:
+        return (
+            f"refusing HTTP without a token: {host!r} is not a loopback host, and "
+            f"--insecure-local takes only {', '.join(LOOPBACK)}. Listen on one of "
+            f"those, or set ${variable}."
+        )
     return (
         f"refusing HTTP without a token (${variable} is not set). Set one, or pass "
         f"--insecure-local with a loopback host for a local test."

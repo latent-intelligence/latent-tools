@@ -1,10 +1,13 @@
-"""The one framework constant the reader needs.
+"""The framework constants the reader needs.
 
-Trimmed from latent-wiki's `core.py` (28db78d): the frontmatter keys of the retired
-two-file shape, which the reader skips a page for rather than misreading it.
+Trimmed from latent-wiki's `core.py` (45b3974): the page statuses a filter may name, and
+the frontmatter keys of the retired two-file shape, which the reader skips a page for
+rather than misreading it.
 """
 
 from __future__ import annotations
+
+STATUSES = ("draft", "active", "superseded", "deprecated")
 
 #: Keys of the page and config shape retired on 2026-10-12, which nothing reads. They
 #: are named only so a store still carrying one is refused with the way out, rather
