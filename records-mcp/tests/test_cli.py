@@ -101,15 +101,18 @@ def test_insecure_local_is_for_a_loopback_host_only(folder: Path) -> None:
 
 
 @pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2"])
-def test_insecure_local_names_the_host_and_says_the_list_is_exact(
+def test_insecure_local_names_the_host_as_the_store_does(
     folder: Path, host: str
 ) -> None:
     result = _run(
         "--deployment", str(folder), "--transport", "http",
         "--host", host, "--insecure-local", "--print-config",
     )  # fmt: skip
-    _one_line_refusal(result, f"{host!r} is not a loopback host")
-    assert "exactly" in result.output
+    _one_line_refusal(
+        result,
+        f"refusing HTTP without a token: {host!r} is not a loopback host, and "
+        "--insecure-local takes only 127.0.0.1, localhost, ::1.",
+    )
 
 
 def test_a_token_still_serves_any_host_with_insecure_local(
@@ -216,13 +219,24 @@ def test_print_config_over_http_dials_ipv6_and_omits_an_absent_token(
     assert entry == {"type": "http", "url": "http://[::1]:8765/mcp"}
 
 
+def test_a_bracketed_ipv6_loopback_is_a_loopback_host(folder: Path) -> None:
+    """The store takes `[::1]` as a URL writes it, and listens on `::1`."""
+    result = _run(
+        "--deployment", str(folder), "--transport", "http",
+        "--host", "[::1]", "--insecure-local", "--print-config",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+    entry = json.loads(result.output)["mcpServers"][f"records-{STORE_ID}"]
+    assert entry == {"type": "http", "url": "http://[::1]:8765/mcp"}
+
+
 async def _starts(entry: dict[str, Any]) -> None:
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
 
     params = StdioServerParameters(command=entry["command"], args=entry["args"])
     async with (
-        stdio_client(params) as (read, write),
+        stdio_client(params, errlog=sys.stderr) as (read, write),
         ClientSession(read, write) as session,
     ):
         started = await session.initialize()
@@ -345,6 +359,40 @@ def test_a_local_root_behind_a_variable_holding_a_tilde_serves(
     _declare(str(folder), "schema_version: 1\nroot: ${RECORDS_HOME}\n")
     found = load_deployment_folder(str(folder))
     assert found.store_dir == (home / "records").resolve() / "store"
+
+
+def test_print_config_names_the_root_s_variables_never_their_values(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A client started with another environment needs the variables `root:` names;
+    the stdio block lists each once as `${VAR}`, and the HTTP block has no `env`."""
+    import shutil
+
+    moved = tmp_path / "elsewhere" / "hives"
+    shutil.copytree(folder / "store", moved / "store")
+    monkeypatch.setenv("HIVES_BASE", str(moved.parent))
+    monkeypatch.setenv("HIVES_LEAF", "hives")
+    _declare(
+        str(folder),
+        "schema_version: 1\nroot: $HIVES_BASE/${HIVES_LEAF}/../$HIVES_LEAF\n",
+    )
+    result = _run("--deployment", str(folder), "--print-config")
+    assert result.exit_code == 0, result.output
+    entry = json.loads(result.output)["mcpServers"][f"records-{STORE_ID}"]
+    assert entry["env"] == {
+        "HIVES_BASE": "${HIVES_BASE}",
+        "HIVES_LEAF": "${HIVES_LEAF}",
+    }
+    assert str(moved) not in result.output
+    monkeypatch.setenv(TOKEN_ENV, "s3cret")
+    result = _run("--deployment", str(folder), "--transport", "http", "--print-config")
+    assert "env" not in json.loads(result.output)["mcpServers"][f"records-{STORE_ID}"]
+
+
+def test_print_config_without_root_variables_has_no_env(folder: Path) -> None:
+    result = _run("--deployment", str(folder), "--print-config")
+    assert result.exit_code == 0, result.output
+    assert "env" not in json.loads(result.output)["mcpServers"][f"records-{STORE_ID}"]
 
 
 def test_a_name_is_refused(folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:

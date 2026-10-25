@@ -8,7 +8,9 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
+import pytest
 from latent_wiki_mcp import _fts
+from latent_wiki_mcp.errors import Refused
 from latent_wiki_mcp.reader import WikiReader
 
 from .conftest import FORMATS
@@ -62,19 +64,20 @@ def test_raw_refuses_an_unstamped_context(tmp_path: Path) -> None:
     _unstamp(context)
     reader = WikiReader(str(wiki), context=str(context))
     for key in ("tide-pool", "kelpmoor-ch01-pools"):
-        text = reader.raw(key)
-        assert "latent-wiki.context" in text
-        assert "Count the limpets." not in text
+        with pytest.raises(Refused, match="latent-wiki.context") as refused:
+            reader.raw(key)
+        assert "Count the limpets." not in str(refused.value)
 
 
 def test_raw_checks_the_stamp_before_reading_an_entry(tmp_path: Path) -> None:
     wiki, context = _copied(tmp_path)
     (context / "context-store.yaml").unlink()
     reader = WikiReader(str(wiki), context=str(context))
-    text = reader.raw("kelpmoor-ch01-pools")
-    assert "not published" in text
-    assert "Count the limpets." not in text
-    assert "not published" in reader.raw("no-such-entry")
+    with pytest.raises(Refused, match="not published") as refused:
+        reader.raw("kelpmoor-ch01-pools")
+    assert "Count the limpets." not in str(refused.value)
+    with pytest.raises(Refused, match="not published"):
+        reader.raw("no-such-entry")
 
 
 def test_raw_refuses_a_declared_source_in_an_unstamped_context(tmp_path: Path) -> None:
@@ -94,9 +97,9 @@ def test_raw_refuses_a_declared_source_in_an_unstamped_context(tmp_path: Path) -
         "notes"
     )
     (context / "context-store.yaml").unlink()
-    refused = WikiReader(str(wiki), context=str(context)).raw("notes")
-    assert "not published" in refused
-    assert "the context copy" not in refused
+    with pytest.raises(Refused, match="not published") as refused:
+        WikiReader(str(wiki), context=str(context)).raw("notes")
+    assert "the context copy" not in str(refused.value)
 
 
 def test_raw_still_reads_a_source_in_the_wiki_store_without_a_stamp(

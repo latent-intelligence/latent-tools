@@ -7,13 +7,13 @@ the same footers and `cut:` lines, with nothing of the store package installed.
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.2#subdirectory=wiki-mcp"
 ```
 
 For a deployment in a bucket, add the `s3` extra:
 
 ```bash
-uv tool install "latent-wiki-mcp[s3] @ git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp"
+uv tool install "latent-wiki-mcp[s3] @ git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.2#subdirectory=wiki-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.

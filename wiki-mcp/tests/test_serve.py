@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from latent_wiki_mcp.errors import Refused
 from latent_wiki_mcp.reader import TOOLS, WikiReader
 from latent_wiki_mcp.serve import BearerCheck, build_server, instructions
 
@@ -110,8 +111,9 @@ def test_pages_are_named_by_the_store_and_echoes_stay_bare(reader: WikiReader) -
     answer = reader.call("wiki_search", {"query": "limpets"})
     assert "[procedure] heronsgate:count-limpets — " in answer
     assert "— search · limpets · " in answer
-    missing = reader.call("wiki_get", {"key": "limpets"})
-    assert missing == "no page 'limpets' in heronsgate"
+    with pytest.raises(Refused) as missing:
+        reader.call("wiki_get", {"key": "limpets"})
+    assert str(missing.value) == "no page 'limpets' in heronsgate"
     bare = reader.call("wiki_get", {"key": "count-limpets"})
     assert reader.call("wiki_get", {"key": "heronsgate:count-limpets"}) == bare
 

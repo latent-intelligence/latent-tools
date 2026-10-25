@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 28db78d, below this header:
+# Verbatim copy of latent-wiki at 45b3974, below this header:
 #   src/latent_wiki/reader.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -44,7 +44,10 @@ place frontmatter keys are named.
 from __future__ import annotations
 
 import json
+import logging
 import re
+from collections.abc import Iterable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, cast
@@ -53,8 +56,10 @@ import yaml
 from upath import UPath
 
 from . import _fts, formats, manifest, views
-from .core import RETIRED_PAGE_KEYS
-from .errors import StoreError
+from .core import RETIRED_PAGE_KEYS, STATUSES
+from .errors import Refused, StoreError
+
+logger = logging.getLogger(__name__)
 
 MANIFEST_NAME = manifest.MANIFEST_NAME
 
@@ -75,6 +80,9 @@ SEARCH_MAX = 50
 NEIGHBORS_MAX = 40
 EVIDENCE_MAX = 20
 SMALL_TYPE = 12
+
+#: Context entries `wiki_evidence` reads at once. Over a bucket each is a request.
+EVIDENCE_READERS = 8
 
 #: A context-store entry key: one path segment, never a path.
 _ENTRY_KEY = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
@@ -254,6 +262,10 @@ class WikiReader:
     label would tie the answer's usefulness to the client getting the label right.
     Arguments take a key bare or with this store's id in front. Refusals and footers
     name it bare, so a page that was not returned is never named as one.
+
+    **A refusal raises `Refused`:** one line, no footer, and never a path or URI, since
+    over HTTP it reaches whoever holds the token. A value a filter cannot match is
+    refused with the values it can, so a misspelling never looks like an empty answer.
     """
 
     def __init__(
@@ -416,10 +428,10 @@ class WikiReader:
         (default off) and `include_drafts` (default on — a draft is shown, flagged).
         A query naming a page exactly — key, title or alias — puts that page first.
         """
+        keep = self._filter(filters)
         q = str(query).strip()
         if not q:
             return []
-        keep = self._filter(filters)
         ranked = self._rank(q, keep)
         lowered = q.lower()
         exact = {
@@ -484,7 +496,17 @@ class WikiReader:
         include_drafts = filters.get("include_drafts", True) not in (False, "false", 0)
         where = filters.get("where") or {}
         if not isinstance(where, dict):
-            raise StoreError("`where` must map a frontmatter field to a value or list")
+            raise Refused("'where' must map a frontmatter field to a value or list")
+        self._known_type(type_filter)
+        self._known_parent(parent)
+        tags = {t for p in self.pages.values() for t in p.tags}
+        if tag_filter and tag_filter not in tags:
+            raise Refused(
+                f"no page tagged {tag_filter!r} in {self.id}; tags: {_listed(tags)}"
+            )
+        if status and status not in STATUSES:
+            raise Refused(f"no status {status!r}; statuses: {', '.join(STATUSES)}")
+        self._known_fields(where)
         keep: set[str] = set()
         for key, page in self.pages.items():
             if type_filter and page.type != type_filter:
@@ -513,20 +535,28 @@ class WikiReader:
             for arg, value in arguments.items()
         }
         key = str(arguments.get("key") or "")
+
+        def number(arg: str, default: int, low: int = 0, cap: int = 0) -> int:
+            value, note = _number(name, arg, arguments.get(arg), default, low, cap)
+            if note:
+                notes.append(note)
+            return value
+
+        notes: list[str] = []
         if name == "wiki_overview":
             return self.overview()
         if name == "wiki_index":
             text = self.index(
                 type=str(arguments.get("type") or ""),
                 part_of=str(arguments.get("part_of") or ""),
-                offset=_clamp(arguments.get("offset"), 0, 0, None),
-                limit=_clamp(arguments.get("limit"), INDEX_PAGE, 1, INDEX_MAX),
+                offset=number("offset", 0),
+                limit=number("limit", INDEX_PAGE, 1, INDEX_MAX),
             )
-            return _also_cut(text, _lowered(arguments.get("limit"), INDEX_MAX))
+            return _also_cut(text, "; ".join(notes))
         if name == "wiki_search":
             query = str(arguments.get("query") or "")
-            limit = _clamp(arguments.get("limit"), 10, 1, SEARCH_MAX)
-            lowered = _lowered(arguments.get("limit"), SEARCH_MAX)
+            limit = number("limit", 10, 1, SEARCH_MAX)
+            lowered = "; ".join(notes)
             hits = self.search(
                 query,
                 limit=limit + 1,
@@ -557,24 +587,25 @@ class WikiReader:
             return self.get(
                 key,
                 section=str(arguments.get("section") or ""),
-                offset=_clamp(arguments.get("offset"), 0, 0, None),
+                offset=number("offset", 0),
             )
         if name == "wiki_neighbors":
-            return self._neighbors_text(key)
+            return self._neighbors_text(key, offset=number("offset", 0))
         if name == "wiki_trace":
             return self._trace_text(key)
         if name == "wiki_evidence":
             return self.evidence(
                 key,
                 entry=str(arguments.get("entry") or ""),
-                offset=_clamp(arguments.get("offset"), 0, 0, None),
+                offset=number("offset", 0),
             )
         if name == "wiki_raw":
-            return self.raw(
+            text = self.raw(
                 key,
-                _clamp(arguments.get("offset"), 0, 0, None),
-                _clamp(arguments.get("max_chars"), RAW_MAX_CHARS, 1, RAW_MAX_CHARS),
+                number("offset", 0),
+                number("max_chars", RAW_MAX_CHARS, 1, RAW_MAX_CHARS),
             )
+            return _also_cut(text, "; ".join(notes))
         if name == "wiki_view":
             return self.view(
                 root_type=str(arguments.get("root_type") or ""),
@@ -582,10 +613,10 @@ class WikiReader:
                 order=str(arguments.get("order") or ""),
                 fields=[str(f) for f in arguments.get("fields") or []],
                 root=str(arguments.get("root") or ""),
-                depth=_clamp(arguments.get("depth"), 0, 0, None),
+                depth=number("depth", 0),
                 include_retired=bool(arguments.get("include_retired")),
             )
-        raise StoreError(f"{self.id} has no tool '{name}'")
+        raise Refused(f"{self.id} has no tool {name!r}")
 
     # -- the ladder -----------------------------------------------------------
 
@@ -646,6 +677,8 @@ class WikiReader:
         limit: int = INDEX_PAGE,
     ) -> str:
         """Every page as one line, paged: of one type, or one parent's children."""
+        self._known_type(type)
+        self._known_parent(part_of)
         chosen = [
             p
             for p in self.pages.values()
@@ -659,22 +692,28 @@ class WikiReader:
         ]
         end = offset + len(chunk)
         cut = f"{end} of {len(pages)}; next offset={end}" if end < len(pages) else ""
+        if offset and offset >= len(pages):
+            cut = _paged(offset, end, len(pages), "pages")
         subject = part_of or type or "all"
         return "\n".join(lines) + self._footer("index", subject, cut=cut)
 
     def get(self, key: str, *, section: str = "", offset: int = 0) -> str:
         """One page: header and body, a named section of it, capped either way."""
-        page = self.pages.get(key)
-        if page is None:
-            return f"no page '{key}' in {self.id}"
+        page = self._page(key)
         body = page.body().strip()
         headings = [text for _, text in _headings(body)]
+        cuts = []
         if section:
             body = _section(body, section)
             if not body:
-                return (
+                raise Refused(
                     f"no section {section!r} in {key}; sections: "
                     f"{'; '.join(headings) or '(none)'}"
+                )
+            inside = {text for _, text in _headings(body)}
+            if others := [h for h in headings if h not in inside]:
+                cuts.append(
+                    f"other sections: {'; '.join(others)}; omit section for all"
                 )
         text = body[offset : offset + GET_MAX_CHARS]
         end = offset + len(text)
@@ -691,9 +730,8 @@ class WikiReader:
             )
         if headings and not section:
             header.append(f"sections: {'; '.join(headings)}")
-        cut = ""
-        if end < len(body):
-            cut = f"{end} of {len(body)} chars; call again with offset={end}"
+        cuts.insert(0, _paged(offset, end, len(body), "chars"))
+        cut = "; ".join(c for c in cuts if c)
         return "\n".join(header) + "\n\n" + text + self._footer("get", key, cut=cut)
 
     def evidence(self, key: str, *, entry: str = "", offset: int = 0) -> str:
@@ -702,61 +740,62 @@ class WikiReader:
         Without `entry`: one gist per cited entry — its title, intent and lead. With
         `entry`: that entry in full, paged. Either way, the next rung is `wiki_raw`.
         """
-        page = self.pages.get(key)
-        if page is None and not entry:
-            return f"no page '{key}' in {self.id}"
-        problem = self._check_context()
-        if problem:
-            return problem
+        page = self._page(key)
+        if offset and not entry:
+            raise Refused("wiki_evidence 'offset' pages one entry; pass entry= with it")
+        if problem := self._check_context():
+            raise Refused(problem)
         if entry:
-            path = self._summary_path(entry)
-            if path is None:
-                return f"no context entry '{entry}' under {self.context}"
+            path = self._entry(entry)
             loaded = _read_entry(path)
             if isinstance(loaded, str):
-                return loaded
+                raise Refused(loaded)
             meta, text = loaded
             chunk = text[offset : offset + RAW_MAX_CHARS]
             end = offset + len(chunk)
-            cut = f"{end} of {len(text)}; offset={end}" if end < len(text) else ""
             return (
                 f"{meta.get('title') or entry}\n{meta.get('source') or ''}\n\n{chunk}"
-                + self._footer("evidence", _bare(entry), cut=cut)
-                + f"\nNext: wiki_raw key={_bare(entry)} for the source text."
+                + f"\n\nNext: wiki_raw key={_bare(entry)} for the source text."
+                + self._footer(
+                    "evidence",
+                    _bare(entry),
+                    cut=_paged(offset, end, len(text), "chars"),
+                )
             )
-        assert page is not None
         if not page.evidence:
             return f"{key} cites no context-store entries" + self._footer(
                 "evidence", key
             )
-        lines = []
         cited = page.evidence
-        for ref in cited[:EVIDENCE_MAX]:
-            path = self._summary_path(ref)
-            if path is None:
-                lines.append(f"- {ref}: not found in {self.context}")
-                continue
-            loaded = _read_entry(path)
-            if isinstance(loaded, str):
-                lines.append(f"- {ref}: {loaded}")
-                continue
-            meta, text = loaded
-            lead = text.strip().split("\n\n", 1)[0][:280]
-            lines.append(
-                f"- {_bare(ref)} — {meta.get('title') or ''}\n"
-                f"  {meta.get('source') or ''}\n"
-                f"  why: {meta.get('why') or ''}\n  {lead}"
-            )
+        shown = cited[:EVIDENCE_MAX]
+        # One request per entry over a bucket: read them at once, listed in order.
+        with ThreadPoolExecutor(min(len(shown), EVIDENCE_READERS)) as pool:
+            lines = list(pool.map(self._gist, shown))
         cut = (
             f"{EVIDENCE_MAX} of {len(cited)} entries; pass entry=<key> for the others"
             if len(cited) > EVIDENCE_MAX
             else ""
         )
         return (
-            "\n".join(lines)
-            + self._footer("evidence", key, cut=cut)
-            + "\nNext: wiki_evidence entry=<key> for one in full, "
+            "\n".join(lines) + "\n\nNext: wiki_evidence entry=<key> for one in full, "
             "wiki_raw key=<key> for its source."
+            + self._footer("evidence", key, cut=cut)
+        )
+
+    def _gist(self, ref: str) -> str:
+        """One cited entry as the evidence list shows it, or why it cannot be."""
+        path = self._summary_path(ref)
+        if path is None:
+            return f"- {ref}: no such entry in the context store"
+        loaded = _read_entry(path)
+        if isinstance(loaded, str):
+            return f"- {ref}: {loaded}"
+        meta, text = loaded
+        lead = text.strip().split("\n\n", 1)[0][:280]
+        return (
+            f"- {_bare(ref)} — {meta.get('title') or ''}\n"
+            f"  {meta.get('source') or ''}\n"
+            f"  why: {meta.get('why') or ''}\n  {lead}"
         )
 
     def raw(self, key: str, offset: int = 0, max_chars: int = RAW_MAX_CHARS) -> str:
@@ -770,24 +809,32 @@ class WikiReader:
         candidates: list[tuple[str, bool]] = []
         if page is not None:
             candidates = [(r, r in page.evidence) for r in page.resources()]
-        elif self.context is not None:
-            candidates = [(key, True)]
+        elif self.context is None:
+            raise Refused(self._no_page(key))
         else:
-            return f"no page '{key}'"
+            if problem := self._check_context():
+                raise Refused(problem)
+            if not _single_segment(key):
+                raise Refused(
+                    f"{self._no_page(key)}, and entry keys are a single segment"
+                )
+            if self._summary_path(key) is None:
+                raise Refused(f"{self._no_page(key)}, and no context entry {key!r}")
+            candidates = [(key, True)]
         for label, is_entry in candidates:
             if (
                 is_entry
                 and self.context is not None
                 and (problem := self._check_context())
             ):
-                return problem
+                raise Refused(problem)
             path = (
                 self._raw_of_entry(label) if is_entry else self._resolve_origin(label)
             )
             if path is None:
                 continue
             if self._in_context(path) and (problem := self._check_context()):
-                return problem
+                raise Refused(problem)
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except (OSError, FileNotFoundError):
@@ -795,21 +842,35 @@ class WikiReader:
             chunk = text[offset : offset + max_chars]
             end = offset + len(chunk)
             head = f"{label}  [{offset}:{end} of {len(text)}]"
-            cut = f"{end} of {len(text)}; call again with offset={end}"
-            return f"{head}\n\n{chunk}" + self._footer(
-                "raw", key, cut=cut if end < len(text) else ""
+            cuts = [_paged(offset, end, len(text), "chars")]
+            untried = candidates[candidates.index((label, is_entry)) + 1 :]
+            others = [_bare(r) for r, entry in untried if entry]
+            if others:
+                cuts.append(
+                    f"also cites {_listed(others)}; wiki_raw key=<entry> for each"
+                )
+            cut = "; ".join(c for c in cuts if c)
+            return f"{head}\n\n{chunk}" + self._footer("raw", key, cut=cut)
+        # A location a page declares is its own content, but a refusal names none:
+        # only `<root>:<relative path>` resources are echoed.
+        declared = (
+            ", ".join(
+                r
+                for r in page.resources()
+                if "://" not in r and not _UNSAFE_RAW.search(r.rpartition(":")[2])
             )
-        declared = ", ".join(page.resources()) if page else key
+            if page
+            else key
+        )
         if self.context is None:
-            return (
-                f"no source attached for '{key}' (declared: {declared or 'none'}). "
+            raise Refused(
+                f"no source attached for {key!r} (declared: {declared or 'none'}). "
                 f"Pair this wiki with its material: serve it from its deployment, "
                 f"`latent-wiki serve --deployment <folder>`."
             )
-        return (
-            f"no readable source for '{key}' (declared: {declared or 'none'}) under "
-            f"{self.context}. Remote or missing sources cannot be paged — this is not "
-            f"an empty source."
+        raise Refused(
+            f"no readable source for {key!r} (declared: {declared or 'none'}). "
+            f"Remote or missing sources cannot be paged; this is not an empty source."
         )
 
     def view(
@@ -829,7 +890,11 @@ class WikiReader:
         superseded step and its replacement would otherwise sit side by side.
         """
         if not root_type or not parent:
-            return "wiki_view needs root_type and parent"
+            raise Refused("wiki_view needs root_type and parent")
+        self._known_type(root_type)
+        self._known_fields([parent, *([order] if order else []), *(fields or [])])
+        if root:
+            self._page(root)
         shown = dict(self.pages)
         under_retired: list[str] = []
         if not include_retired:
@@ -856,7 +921,10 @@ class WikiReader:
             ),
             {key: (page.title, page.raw) for key, page in shown.items()},
         )
-        text, cut = views.render(tree, root, depth, named=self.name)
+        try:
+            text, cut = views.render(tree, root, depth, named=self.name)
+        except views.NoNode as exc:
+            raise Refused(str(exc.args[0])) from exc
         if under_retired:
             names = under_retired[: views.MAX_NAMES]
             text += "\nunder a retired parent (include_retired to show): " + ", ".join(
@@ -907,26 +975,32 @@ class WikiReader:
             "superseded_by": page.raw.get("superseded_by") or "",
         }
 
-    def _neighbors_text(self, key: str) -> str:
+    def _neighbors_text(self, key: str, offset: int = 0) -> str:
+        self._page(key)
         edges = self.neighbors(key)
-        if not edges:
-            return f"no page '{key}'"
-        parts, cut = [], []
+        parts, cut, more = [], [], False
         for direction, arrow in (("out", "->"), ("in", "<-")):
             rows = edges[direction]
-            shown = rows[:NEIGHBORS_MAX]
+            shown = rows[offset : offset + NEIGHBORS_MAX]
             body = "\n".join(
                 f"  {arrow} {self.name(t)} — {self._title(t)}  ({d})" for t, d in shown
             )
             parts.append(f"{direction}:\n{body or '  (none)'}")
-            if len(rows) > len(shown):
-                cut.append(f"{direction} {len(shown)} of {len(rows)}")
-        return "\n".join(parts) + self._footer("neighbors", key, cut=", ".join(cut))
+            if offset + len(shown) < len(rows):
+                cut.append(f"{direction} {offset + len(shown)} of {len(rows)}")
+                more = True
+            elif offset and offset >= len(rows) and rows:
+                cut.append(
+                    f"offset {offset} is past the end of {len(rows)} {direction}"
+                )
+        then = f"; call again with offset={offset + NEIGHBORS_MAX}" if more else ""
+        return "\n".join(parts) + self._footer(
+            "neighbors", key, cut=", ".join(cut) + then
+        )
 
     def _trace_text(self, key: str) -> str:
+        self._page(key)
         trace = self.trace(key)
-        if not trace:
-            return "no page"
         named = {
             **trace,
             "key": self.name(key),
@@ -952,6 +1026,45 @@ class WikiReader:
 
     # -- internals ------------------------------------------------------------
 
+    def _no_page(self, key: str) -> str:
+        """The one refusal for a page that is not here, in every tool."""
+        return f"no page {key!r} in {self.id}"
+
+    def _page(self, key: str) -> _Page:
+        page = self.pages.get(key)
+        if page is None:
+            raise Refused(self._no_page(key))
+        return page
+
+    def _known_type(self, kind: str) -> None:
+        types = {p.type for p in self.pages.values() if p.type}
+        if kind and kind not in types:
+            raise Refused(
+                f"no page of type {kind!r} in {self.id}; types: {_listed(types)}"
+            )
+
+    def _known_parent(self, key: str) -> None:
+        if key and key not in self.pages:
+            parents = {p.parent for p in self.pages.values() if p.parent in self.pages}
+            raise Refused(f"{self._no_page(key)}; parents: {_listed(parents)}")
+
+    def _known_fields(self, names: Iterable[str]) -> None:
+        known = {f for p in self.pages.values() for f in p.raw}
+        for name in names:
+            if name not in known:
+                raise Refused(f"no page has a field {name!r}; fields: {_listed(known)}")
+
+    def _entry(self, ref: str) -> Path:
+        """A context entry's summary, or the refusal that says why there is none."""
+        if not _single_segment(ref):
+            raise Refused(f"entry keys are a single segment, not {ref!r}")
+        path = self._summary_path(ref)
+        if path is None:
+            raise Refused(
+                f"no context entry {_bare(ref)!r} in {self.id}'s context store"
+            )
+        return path
+
     def name(self, key: str) -> str:
         """A page as answers name it: `<store_id>:<key>`. A link into a peer store
         already carries its store's id, and stays as it is."""
@@ -970,23 +1083,33 @@ class WikiReader:
         """Why the paired context store cannot be read, or "" when it can."""
         if self.context is None:
             return (
-                "no context store paired with this wiki — serve it from its "
+                "no context store paired with this wiki: serve it from its "
                 "deployment, `latent-wiki serve --deployment <folder>`, whose context "
                 "store its pages cite."
             )
         if self._context_checked:
             return ""
+        # Said to the caller, so the store is named by role, never by location; the
+        # operator's log keeps the location and the error.
         descriptor = self.context / "context-store.yaml"
+        named = "the paired context store's context-store.yaml"
         try:
             data = yaml.safe_load(descriptor.read_text(encoding="utf-8")) or {}
         except FileNotFoundError:
+            logger.warning("%s is missing", descriptor)
             return (
-                f"{descriptor} is missing — the paired context store is not published"
+                "the paired context store has no context-store.yaml, so it is not "
+                "published"
             )
         except OSError as exc:
-            return REFUSED.format(path=descriptor, error=exc)
+            logger.warning("%s could not be read: %s", descriptor, exc)
+            return (
+                f"{named} could not be read ({type(exc).__name__}); check the "
+                f"credentials and the policy on its prefix"
+            )
         except (yaml.YAMLError, UnicodeDecodeError) as exc:
-            return f"{descriptor} cannot be read as YAML: {exc}"
+            logger.warning("%s is not YAML: %s", descriptor, _one_line(exc))
+            return f"{named} cannot be read as YAML: {_one_line(exc)}"
         found = (
             (data.get("format"), data.get("format_version"))
             if isinstance(data, dict)
@@ -994,9 +1117,12 @@ class WikiReader:
         )
         if found != CONTEXT_FORMAT:
             name, version = CONTEXT_FORMAT
+            logger.warning(
+                "%s declares %s, not %s v%s", descriptor, found, name, version
+            )
             return (
-                f"{descriptor} declares {found}; this build reads {name} v{version} — "
-                f"republish the context store with the tool that built it"
+                f"{named} declares {found}; this build reads {name} v{version}. "
+                f"Republish the context store with the tool that built it"
             )
         self._context_checked = True
         return ""
@@ -1008,18 +1134,9 @@ class WikiReader:
         return str(path).startswith(str(self.context).rstrip("/") + "/")
 
     def _summary_path(self, ref: str) -> Path | None:
-        key = _bare(ref)
-        # An entry key is one segment: a ref with a path in it is refused outright,
-        # not stripped to whatever follows its last colon.
-        if (
-            self.context is None
-            or "/" in ref
-            or "\\" in ref
-            or not _ENTRY_KEY.match(key)
-            or ".." in key
-        ):
+        if self.context is None or not _single_segment(ref):
             return None
-        candidate = self.context / "summaries" / f"{key}.md"
+        candidate = self.context / "summaries" / f"{_bare(ref)}.md"
         try:
             return candidate if candidate.is_file() else None
         except OSError:
@@ -1106,6 +1223,39 @@ def _bare(ref: str) -> str:
     return ref.rsplit(":", 1)[-1]
 
 
+def _single_segment(ref: str) -> bool:
+    """An entry ref names one segment: a path in it is refused outright, not stripped
+    to whatever follows its last colon."""
+    key = _bare(ref)
+    return (
+        "/" not in ref
+        and "\\" not in ref
+        and bool(_ENTRY_KEY.match(key))
+        and ".." not in key
+    )
+
+
+def _one_line(error: Exception) -> str:
+    return " ".join(str(error).split())
+
+
+def _listed(values: Iterable[str]) -> str:
+    """Known values for a refusal, sorted unless already in order, and bounded."""
+    names = sorted(values) if isinstance(values, set) else list(values)
+    shown = ", ".join(names[: views.MAX_NAMES]) or "none"
+    more = len(names) - views.MAX_NAMES
+    return f"{shown} … and {more} more" if more > 0 else shown
+
+
+def _paged(offset: int, end: int, total: int, unit: str) -> str:
+    """The `cut:` for one page of a longer text, or "" when nothing was left."""
+    if end < total:
+        return f"{end} of {total} {unit}; call again with offset={end}"
+    if offset and offset >= total:
+        return f"offset {offset} is past the end of {total} {unit}; offset=0 to start"
+    return ""
+
+
 def _read_entry(path: Path) -> tuple[dict[str, Any], str] | str:
     """A context entry's frontmatter and body, read once — or why it could not be."""
     try:
@@ -1113,34 +1263,37 @@ def _read_entry(path: Path) -> tuple[dict[str, Any], str] | str:
     except UnicodeDecodeError as exc:
         return f"{path.name} is not UTF-8 text ({exc.reason})"
     except OSError as exc:
-        return f"{path.name} could not be read: {exc}"
+        return f"{path.name} could not be read ({type(exc).__name__})"
     match = _FRONTMATTER.match(text)
     if not match:
         return {}, text
     try:
         parsed = yaml.safe_load(match.group(0).strip().strip("-")) or {}
     except yaml.YAMLError as exc:
-        return f"{path.name} has frontmatter that is not YAML: {exc}"
+        return f"{path.name} has frontmatter that is not YAML: {_one_line(exc)}"
     return (parsed if isinstance(parsed, dict) else {}), text[match.end() :]
 
 
-def _clamp(value: Any, default: int, low: int, high: int | None) -> int:
-    """A caller's number, defaulted and held inside the bounds every rung promises."""
-    try:
-        number = int(value) if value not in (None, "") else default
-    except (TypeError, ValueError):
-        number = default
-    number = max(low, number)
-    return min(number, high) if high is not None else number
+def _number(
+    tool: str, arg: str, value: Any, default: int, low: int, cap: int
+) -> tuple[int, str]:
+    """A caller's number, or its default, and what the `cut:` line says about it.
 
-
-def _lowered(value: Any, cap: int) -> str:
-    """What a footer says when a caller's limit was above the cap and lowered to it."""
-    try:
-        asked = int(value)
-    except (TypeError, ValueError):
-        return ""
-    return f"limit lowered to {cap}, the cap" if asked > cap else ""
+    Below `low` is refused, not raised to it: an answer to a question nobody asked
+    looks like an answer. Above `cap` (when there is one) is lowered, and says so.
+    """
+    if value is None:
+        return default, ""
+    if isinstance(value, bool) or not isinstance(value, int):
+        try:
+            value = int(str(value))
+        except ValueError:
+            raise Refused(f"{tool} {arg!r} must be an integer") from None
+    if value < low:
+        raise Refused(f"{tool} {arg!r} must be {low} or more")
+    if cap and value > cap:
+        return cap, f"{arg} lowered to {cap}, the cap"
+    return value, ""
 
 
 def _also_cut(text: str, note: str) -> str:
@@ -1210,17 +1363,37 @@ def _field_matches(value: Any, wanted: Any) -> bool:
     return str(value) in accepted if value is not None else False
 
 
-_KEY_ONLY: dict[str, Any] = {
-    "type": "object",
-    "properties": {"key": {"type": "string"}},
-    "required": ["key"],
+#: An argument naming a page, as every tool that takes one describes it.
+_KEY = {
+    "type": "string",
+    "description": "A page key, bare or as answers name it (<store_id>:<key>).",
 }
+
+#: Retired pages, as search and views both filter them.
+_RETIRED = {
+    "type": "boolean",
+    "default": False,
+    "description": "Include superseded and deprecated pages, hidden by default.",
+}
+
+
+def _text(description: str) -> dict[str, Any]:
+    return {"type": "string", "description": description}
+
+
+def _offset(unit: str) -> dict[str, Any]:
+    return {
+        "type": "integer",
+        "description": f"{unit} to skip, to continue past a cut.",
+    }
+
 
 # Descriptions are prompts. Each one says what the tool cannot do as well as what it
 # can, and where to go next — an overpromising description produces confident wrong
 # answers, and a ladder nobody can see is not climbed. A parameter whose default is not
 # the empty value declares it: over MCP an omitted argument arrives as that default,
-# and `include_drafts: false` or `limit: 0` would quietly change the answer.
+# and `include_drafts: false` or `limit: 0` would quietly change the answer. Every
+# argument carries one line saying what it is, since a model sees only the schema.
 TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
     (
         "wiki_overview",
@@ -1236,10 +1409,14 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "type": {"type": "string"},
-                "part_of": {"type": "string"},
-                "offset": {"type": "integer"},
-                "limit": {"type": "integer", "default": INDEX_PAGE},
+                "type": _text("Only pages of this type; wiki_overview lists them."),
+                "part_of": _text("Only the children of this page, in step order."),
+                "offset": _offset("Lines"),
+                "limit": {
+                    "type": "integer",
+                    "default": INDEX_PAGE,
+                    "description": f"Lines to return, at most {INDEX_MAX}.",
+                },
             },
         },
     ),
@@ -1253,15 +1430,32 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "query": {"type": "string"},
-                "type": {"type": "string"},
-                "tag": {"type": "string"},
-                "part_of": {"type": "string"},
-                "status": {"type": "string"},
-                "where": {"type": "object"},
-                "include_retired": {"type": "boolean", "default": False},
-                "include_drafts": {"type": "boolean", "default": True},
-                "limit": {"type": "integer", "default": 10},
+                "query": _text(
+                    "Words to find; an exact key, title or alias comes first."
+                ),
+                "type": _text("Only pages of this type."),
+                "tag": _text("Only pages carrying this tag."),
+                "part_of": _text("Only the children of this page."),
+                "status": _text(
+                    "Only pages with this status: draft, active, superseded or "
+                    "deprecated."
+                ),
+                "where": {
+                    "type": "object",
+                    "description": "Frontmatter field to a value, or to a list of "
+                    "accepted values; every field must match.",
+                },
+                "include_retired": _RETIRED,
+                "include_drafts": {
+                    "type": "boolean",
+                    "default": True,
+                    "description": "Include draft pages, shown flagged.",
+                },
+                "limit": {
+                    "type": "integer",
+                    "default": 10,
+                    "description": f"Results to return, at most {SEARCH_MAX}.",
+                },
             },
             "required": ["query"],
         },
@@ -1273,9 +1467,9 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "key": {"type": "string"},
-                "section": {"type": "string"},
-                "offset": {"type": "integer"},
+                "key": _KEY,
+                "section": _text("Only the section whose heading starts with this."),
+                "offset": _offset("Characters"),
             },
             "required": ["key"],
         },
@@ -1283,14 +1477,19 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
     (
         "wiki_neighbors",
         "What a page links to and what links back, with each edge's derivation "
-        "(extracted, inferred or ambiguous). Capped.",
-        _KEY_ONLY,
+        f"(extracted, inferred or ambiguous). {NEIGHBORS_MAX} per direction; offset "
+        "continues.",
+        {
+            "type": "object",
+            "properties": {"key": _KEY, "offset": _offset("Edges in each direction")},
+            "required": ["key"],
+        },
     ),
     (
         "wiki_trace",
         "Provenance and position: cited evidence, sources, authorship, lifecycle, the "
         "chain of parents (part_of) and the direct children.",
-        _KEY_ONLY,
+        {"type": "object", "properties": {"key": _KEY}, "required": ["key"]},
     ),
     (
         "wiki_evidence",
@@ -1300,9 +1499,11 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "key": {"type": "string"},
-                "entry": {"type": "string"},
-                "offset": {"type": "integer"},
+                "key": _KEY,
+                "entry": _text(
+                    "A context-store entry key, as the gists name it, to read in full."
+                ),
+                "offset": _offset("Characters of the entry"),
             },
             "required": ["key"],
         },
@@ -1314,9 +1515,13 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "key": {"type": "string"},
-                "offset": {"type": "integer"},
-                "max_chars": {"type": "integer", "default": RAW_MAX_CHARS},
+                "key": _text("A page key, or a context-store entry key."),
+                "offset": _offset("Characters"),
+                "max_chars": {
+                    "type": "integer",
+                    "default": RAW_MAX_CHARS,
+                    "description": f"Characters to return, at most {RAW_MAX_CHARS}.",
+                },
             },
             "required": ["key"],
         },
@@ -1331,13 +1536,22 @@ TOOLS: tuple[tuple[str, str, dict[str, Any]], ...] = (
         {
             "type": "object",
             "properties": {
-                "root_type": {"type": "string"},
-                "parent": {"type": "string"},
-                "order": {"type": "string"},
-                "fields": {"type": "array", "items": {"type": "string"}},
-                "root": {"type": "string"},
-                "depth": {"type": "integer"},
-                "include_retired": {"type": "boolean", "default": False},
+                "root_type": _text("The page type at the top of the tree."),
+                "parent": _text(
+                    "The frontmatter field naming a page's parent, such as part_of."
+                ),
+                "order": _text("The frontmatter field that orders siblings."),
+                "fields": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Frontmatter fields to show on each node.",
+                },
+                "root": _text("One page, to draw only the tree beneath it."),
+                "depth": {
+                    "type": "integer",
+                    "description": "Levels to draw; 0 draws them all.",
+                },
+                "include_retired": _RETIRED,
             },
             "required": ["root_type", "parent"],
         },

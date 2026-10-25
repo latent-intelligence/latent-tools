@@ -16,7 +16,7 @@ refused rather than expanded with this host's environment, since no other host's
 could be meant, and a value expanded here could carry this process's secrets into a
 request path.
 
-Adapted from latent-wiki's `deployment.py` (28db78d), reading fewer keys and so
+Adapted from latent-wiki's `deployment.py` (45b3974), reading fewer keys and so
 refusing less: it serves a declaration the store refuses for lacking `wiki:` or for a
 key the store does not know. It refuses a name, a folder without a declaration, a
 `schema_version` it does not know, a `name:` that differs from the folder's, a

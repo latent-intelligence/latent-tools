@@ -7,7 +7,7 @@ serves some declarations the store refuses; `deployment.py` says what it reads a
 refuses. Nothing but the protocol reaches stdout on stdio; diagnostics go
 through logging, to stderr.
 
-Adapted from latent-records' `cli/serve.py` (5a75235).
+Adapted from latent-records' `cli/serve.py` (e9eb62a).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ from rich.markup import escape
 
 from . import __version__
 from . import serve as serving
-from .deployment import load_deployment_folder
+from .deployment import load_deployment_folder, root_variables
 from .errors import LatentRecordsError
 from .store import Store
 
@@ -100,10 +100,8 @@ def main(
             )
         )
     token = os.environ.get(TOKEN_ENV) or None
-    if transport == "http" and (
-        problem := _refuse_insecure_host(token, host, insecure_local)
-    ):
-        fail(LatentRecordsError(problem))
+    if transport == "http":
+        host = serving.bare_host(host)
     if transport == "http" and (
         problem := serving.refuse_http(token, TOKEN_ENV, host, insecure_local)
     ):
@@ -134,6 +132,7 @@ def main(
             port=port,
             token_env=TOKEN_ENV,
             token=token is not None,
+            variables=root_variables(found),
         )
         typer.echo(json.dumps(block, indent=2))
         return
@@ -167,17 +166,6 @@ UV_CACHE_WARNING = (
 def _in_uv_cache(command: str) -> bool:
     """Whether a command runs from uv's cache, where `uvx` puts a tool it runs."""
     return any(part.startswith("archive-v") for part in Path(command).parts)
-
-
-def _refuse_insecure_host(token: str | None, host: str, insecure_local: bool) -> str:
-    """Why `--insecure-local` may not serve this host, or "" when it may or a token
-    is set. The loopback list is exact, as the store's is: 127.0.0.2 is not on it."""
-    if token or not insecure_local or host in serving.LOOPBACK:
-        return ""
-    return (
-        f"{host!r} is not a loopback host: --insecure-local takes exactly "
-        f"{', '.join(serving.LOOPBACK)}. Use one of those, or set ${TOKEN_ENV}."
-    )
 
 
 if __name__ == "__main__":

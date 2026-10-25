@@ -32,7 +32,7 @@ strict = true
 files = ["wiki-mcp/src", "records-mcp/src", "tests", "scripts"]
 
 [[tool.mypy.overrides]]
-module = ["lancedb.*", "pyarrow.*", "open_clip.*", "sentence_transformers.*", "torch.*", "PIL.*"]
+module = ["lancedb.*", "pyarrow.*", "open_clip.*", "sentence_transformers.*", "torch.*", "PIL.*", "huggingface_hub.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

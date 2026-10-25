@@ -7,7 +7,7 @@ object storage. It answers latent-records' `records-tools` contract: `describe`,
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.1#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
 ```
 
 Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `text`
@@ -15,7 +15,7 @@ Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `
 whose space needs a model you did not install says so on the first search.
 
 ```bash
-uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.1#subdirectory=records-mcp"
+uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.
@@ -39,7 +39,11 @@ every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
 bearer token in `$LATENT_RECORDS_SERVE_TOKEN`, unless `--insecure-local` is given with a
-loopback host: exactly `127.0.0.1`, `localhost` or `::1`.
+loopback host: exactly `127.0.0.1`, `localhost` or `::1` (or `[::1]`).
+
+`--print-config` prints the block after opening the store, so it is one that starts. When
+`root:` names environment variables, the stdio block lists them in `env` as `${VAR}`, never
+their values; the client's environment must hold them.
 
 ## What it is made of
 

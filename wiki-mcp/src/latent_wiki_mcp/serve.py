@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 28db78d, below this header:
+# Verbatim copy of latent-wiki at 45b3974, below this header:
 #   src/latent_wiki/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -19,6 +19,11 @@ Kept from the first `latent-wiki serve`, because use validated them:
   folder `--deployment` names, a local path or any URI `UPath` opens; a remote store
   reads through `manifest.json`.
 
+**A refusal is one line, flagged as an error, and logged once at DEBUG.** The reader
+raises `Refused`; argument validation, an unknown argument and an unknown tool are
+refused here in the same shape, so no pydantic dump reaches a client and no
+rich-wrapped INFO block reaches the operator's log for each misspelt call.
+
 **HTTP requires a token,** read from the environment, compared in constant time on every
 request. HTTP without one is refused unless the operator passes `--insecure-local` and
 the host is loopback.
@@ -31,9 +36,13 @@ from __future__ import annotations
 
 import hmac
 import inspect
+import logging
 from typing import Any
 
+from .errors import Refused
 from .reader import RETIRED, TOOLS, WikiReader
+
+logger = logging.getLogger(__name__)
 
 #: A resource description's cap — a search lead's, so listing every page stays bounded.
 DESCRIPTION_MAX = 280
@@ -57,13 +66,28 @@ _TYPES: dict[str, type] = {
 #: than `None`: the reader reads these with `str(...)` / `int(... or default)`.
 _EMPTY: dict[type, Any] = {str: "", int: 0, float: 0.0, bool: False, list: [], dict: {}}
 
+#: How a refusal names what a mistyped argument should have been.
+_EXPECTED = {
+    "string": "a string",
+    "integer": "an integer",
+    "number": "a number",
+    "boolean": "true or false",
+    "array": "a list",
+    "object": "an object",
+}
+
 
 def _signature(schema: dict[str, Any]) -> inspect.Signature:
     """A call signature expressing `schema`.
 
     Required properties become required keyword arguments; the rest take a default, so
-    the generated MCP schema marks exactly what the reader marked.
+    the generated MCP schema marks exactly what the reader marked. Each description
+    rides along, so a model reads what every argument is.
     """
+    from typing import Annotated
+
+    from pydantic import BeforeValidator, Field
+
     properties: dict[str, Any] = schema.get("properties") or {}
     required = set(schema.get("required") or [])
     parameters = []
@@ -72,6 +96,14 @@ def _signature(schema: dict[str, Any]) -> inspect.Signature:
         annotation: Any = base
         if base is list and (prop.get("items") or {}).get("type") == "string":
             annotation = list[str]
+        extra: list[Any] = []
+        if base is int:
+            # Lax, as JSON Schema reads `5.0`, except that `true` is not 1.
+            extra.append(BeforeValidator(_not_a_boolean))
+        if prop.get("description"):
+            extra.append(Field(description=prop["description"]))
+        if extra:
+            annotation = Annotated[annotation, *extra]
         if name in required:
             default: Any = inspect.Parameter.empty
         else:
@@ -87,14 +119,25 @@ def _signature(schema: dict[str, Any]) -> inspect.Signature:
     return inspect.Signature(parameters)
 
 
+def _not_a_boolean(value: Any) -> Any:
+    if isinstance(value, bool):
+        raise ValueError("a boolean is not a number")
+    return value
+
+
 def _handler(reader: WikiReader, name: str, description: str, schema: Any) -> Any:
     """One MCP tool, delegating to the reader's own dispatcher.
 
-    Sync, so the server runs it on a worker thread: the reader's reads block.
+    Sync, so the server runs it on a worker thread: the reader's reads block. A
+    refusal becomes the SDK's anticipated failure, which the server says in one line.
     """
+    from mcp.server.mcpserver.exceptions import ToolError
 
     def run(**arguments: Any) -> str:
-        return str(reader.call(name, arguments))
+        try:
+            return str(reader.call(name, arguments))
+        except Refused as exc:
+            raise ToolError(str(exc)) from exc
 
     run.__name__ = name
     run.__doc__ = description
@@ -150,27 +193,39 @@ def build_server(reader: WikiReader) -> Any:
 
     An argument no tool declares is refused, not dropped: the SDK's own validation
     discards extras, so a misspelled filter would otherwise return results the caller
-    believes were filtered.
+    believes were filtered. Every refusal, the reader's or the schema's, comes back as
+    one line with `isError` set, and is logged once, at DEBUG; a crash still reaches
+    the SDK, which logs it in full.
     """
     from mcp.server import MCPServer
-    from mcp.server.mcpserver.exceptions import ToolError
+    from mcp.server.mcpserver.exceptions import ToolError, UnexpectedToolError
     from mcp.server.mcpserver.resources import FunctionResource
-    from mcp.types import ToolAnnotations
+    from mcp.types import CallToolResult, TextContent, ToolAnnotations
 
-    declared = {name: set(schema.get("properties") or {}) for name, _, schema in TOOLS}
+    schemas = {name: schema for name, _, schema in TOOLS}
 
     class Server(MCPServer):
         async def call_tool(
             self, name: str, arguments: dict[str, Any], context: Any = None
         ) -> Any:
-            if name in declared and (
-                unknown := sorted(set(arguments) - declared[name])
-            ):
-                takes = ", ".join(sorted(declared[name])) or "no arguments"
-                # %r: an argument name is caller data, and a refusal is one line.
-                names = ", ".join(repr(u) for u in unknown)
-                raise ToolError(f"{name} has no {names}; it takes {takes}")
-            return await super().call_tool(name, arguments, context)
+            try:
+                if name not in schemas:
+                    raise ToolError(f"no tool {name!r}; tools: {', '.join(schemas)}")
+                declared = set(schemas[name].get("properties") or {})
+                if unknown := sorted(set(arguments) - declared):
+                    # %r: an argument name is caller data, and a refusal is one line.
+                    names = ", ".join(repr(u) for u in unknown)
+                    raise ToolError(f"{name} has no {names}; {_takes(schemas[name])}")
+                return await super().call_tool(name, arguments, context)
+            except UnexpectedToolError:
+                raise
+            except ToolError as exc:
+                said = _refusal(name, exc, schemas.get(name) or {})
+            # %r: a tool name is caller data, and the log line stays one line.
+            logger.debug("%r refused: %s", name, said)
+            return CallToolResult(
+                content=[TextContent(type="text", text=said)], is_error=True
+            )
 
     server = Server(reader.id, instructions=instructions(reader))
     # Declared, not implied: a client that gates on effects reads this to decide what
@@ -198,6 +253,42 @@ def build_server(reader: WikiReader) -> Any:
             )
         )
     return server
+
+
+def _takes(schema: dict[str, Any]) -> str:
+    return "it takes " + (
+        ", ".join(sorted(schema.get("properties") or {})) or "nothing"
+    )
+
+
+def _refusal(name: str, error: Exception, schema: dict[str, Any]) -> str:
+    """What a refused call says: one line, naming the argument at fault.
+
+    The SDK wraps a tool's own refusal, and a schema failure is a pydantic dump with
+    a documentation URL; both are said here the way the reader says its own.
+    """
+    from pydantic import ValidationError
+
+    cause = error.__cause__
+    if isinstance(cause, ValidationError):
+        problems = cause.errors()
+        missing = sorted({str(p["loc"][0]) for p in problems if p["type"] == "missing"})
+        if missing:
+            needs = ", ".join(repr(m) for m in missing)
+            return f"{name} needs {needs}; {_takes(schema)}"
+        properties = schema.get("properties") or {}
+        wrong = sorted({str(p["loc"][0]) for p in problems if p["loc"]})
+        return f"{name} " + ", ".join(
+            f"{arg!r} must be {_expected(properties.get(arg) or {})}" for arg in wrong
+        )
+    said = str(cause) if isinstance(cause, Exception) else str(error)
+    return " ".join(said.split())
+
+
+def _expected(prop: dict[str, Any]) -> str:
+    kind = _EXPECTED.get(str(prop.get("type")), "another type")
+    item = (prop.get("items") or {}).get("type")
+    return f"{kind} of {item}s" if item else kind
 
 
 def client_config(
