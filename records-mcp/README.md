@@ -25,7 +25,7 @@ To move to a new release, run the line with the new tag; the tool is replaced wi
 ```bash
 latent-records-mcp --deployment <folder>                 # stdio: what a client starts
 latent-records-mcp --deployment <folder> --print-config  # the mcpServers block to paste in
-claude mcp add hives -- latent-records-mcp --deployment <folder> --warm
+claude mcp add records-brindlewick-hives -- latent-records-mcp --deployment <folder> --warm
 ```
 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
@@ -33,12 +33,13 @@ fsspec opens. The server reads the declaration's `schema_version`, `name` and `r
 serves `<root>/store`, which must carry a stamped `store.json` with a `store_id`. A local
 declaration's root expands `$VAR` and then `~`, so a variable holding `~` resolves under home;
 a remote declaration's root is taken as written; one that needs this host's environment (`~`, `$VAR`)
-or its disk (an absolute path) is refused. `--warm` loads
+or its disk (an absolute path) is refused. It reads nothing else, so it serves some
+declarations `latent-records serve` refuses, such as one without `store_id`. `--warm` loads
 every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
 bearer token in `$LATENT_RECORDS_SERVE_TOKEN`, unless `--insecure-local` is given with a
-loopback host.
+loopback host: exactly `127.0.0.1`, `localhost` or `::1`.
 
 ## What it is made of
 
@@ -51,5 +52,5 @@ commit each release carries. The tool contract and the store format are latent-r
 `tests/fixtures/deployments/` is a small store built from latent-records' own fixture
 deployment with its test embedder, by `scripts/fixture_store.py`.
 
-This server and `latent-records serve` give the same answers; the workspace's `just conform`
+This server and `latent-records serve` give the same tool answers; the workspace's `just conform`
 checks that with both installed.

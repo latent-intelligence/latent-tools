@@ -1,8 +1,10 @@
 """`latent-records-mcp` — one store over MCP, read-only, stdio or HTTP, for agents.
 
 The only module that prints. It is `latent-records serve` as a command of its own: the
-same options, the same refusals and the same token variable, so a client configured for
-one runs the other. Nothing but the protocol reaches stdout on stdio; diagnostics go
+same options and the same token variable, so a client configured for one runs the other,
+and the same tool answers. It reads less of the declaration than the store does, so it
+serves some declarations the store refuses; `deployment.py` says what it reads and
+refuses. Nothing but the protocol reaches stdout on stdio; diagnostics go
 through logging, to stderr.
 
 Adapted from latent-records' `cli/serve.py` (5a75235).
@@ -16,6 +18,7 @@ import logging
 import os
 import shutil
 import sys
+from pathlib import Path
 from typing import NoReturn
 
 import typer
@@ -98,6 +101,10 @@ def main(
         )
     token = os.environ.get(TOKEN_ENV) or None
     if transport == "http" and (
+        problem := _refuse_insecure_host(token, host, insecure_local)
+    ):
+        fail(LatentRecordsError(problem))
+    if transport == "http" and (
         problem := serving.refuse_http(token, TOKEN_ENV, host, insecure_local)
     ):
         fail(LatentRecordsError(problem))
@@ -113,6 +120,10 @@ def main(
         fail(exc)
     if print_config:
         argv = [*_launcher(), "--deployment", str(found.path.parent)]
+        if _in_uv_cache(argv[0]):
+            err_console.print(
+                f"[yellow]warning[/] {escape(UV_CACHE_WARNING)}", soft_wrap=True
+            )
         if warm:
             argv.append("--warm")
         block = serving.client_config(
@@ -144,6 +155,29 @@ def _launcher() -> list[str]:
     if script.endswith(".py") or not os.access(script, os.X_OK):
         return [sys.executable, "-m", "latent_records_mcp.cli"]
     return [os.path.abspath(script)]
+
+
+UV_CACHE_WARNING = (
+    "this command runs from uv's cache, as uvx runs it, and the block names that path: "
+    "`uv cache clean` or `uv cache prune` removes it. Install the tool with `uv tool "
+    "install` (README) and print the config again."
+)
+
+
+def _in_uv_cache(command: str) -> bool:
+    """Whether a command runs from uv's cache, where `uvx` puts a tool it runs."""
+    return any(part.startswith("archive-v") for part in Path(command).parts)
+
+
+def _refuse_insecure_host(token: str | None, host: str, insecure_local: bool) -> str:
+    """Why `--insecure-local` may not serve this host, or "" when it may or a token
+    is set. The loopback list is exact, as the store's is: 127.0.0.2 is not on it."""
+    if token or not insecure_local or host in serving.LOOPBACK:
+        return ""
+    return (
+        f"{host!r} is not a loopback host: --insecure-local takes exactly "
+        f"{', '.join(serving.LOOPBACK)}. Use one of those, or set ${TOKEN_ENV}."
+    )
 
 
 if __name__ == "__main__":

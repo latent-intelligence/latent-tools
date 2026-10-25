@@ -44,6 +44,10 @@ uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.
 uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.1#subdirectory=records-mcp" latent-records-mcp --help
 ```
 
+`uvx` runs the tool from uv's cache, which `uv cache clean` or `uv cache prune` removes. So
+`--print-config` under `uvx` still prints the cache path, and warns on stderr: install the
+tool with `uv tool install` before pasting a config into a client.
+
 See each tool’s README for configuration and usage.
 
 ## Developing
