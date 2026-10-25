@@ -75,6 +75,28 @@ def test_raw_checks_the_stamp_before_reading_an_entry(tmp_path: Path) -> None:
     assert "Count the limpets." not in text
 
 
+def test_raw_refuses_a_declared_source_in_an_unstamped_context(tmp_path: Path) -> None:
+    """A `sources[].resource` that resolves into the context store is guarded too."""
+    wiki, context = _copied(tmp_path)
+    (context / "raw" / "shore-notes.md").write_text("the context copy")
+    _add_pages(
+        wiki,
+        {
+            "notes": {
+                "type": "concept",
+                "sources": [{"resource": "corpus:raw/shore-notes.md"}],
+            }
+        },
+    )
+    assert "the context copy" in WikiReader(str(wiki), context=str(context)).raw(
+        "notes"
+    )
+    (context / "context-store.yaml").unlink()
+    refused = WikiReader(str(wiki), context=str(context)).raw("notes")
+    assert "not published" in refused
+    assert "the context copy" not in refused
+
+
 def test_raw_still_reads_a_source_in_the_wiki_store_without_a_stamp(
     tmp_path: Path,
 ) -> None:
