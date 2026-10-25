@@ -1,10 +1,10 @@
 """The copied files are the store's, byte for byte, below their three-line header, at
 the commit the header names.
 
-Runs where `LATENT_WIKI_SRC` names a latent-wiki checkout's `src/latent_wiki`; skipped
-elsewhere. This is how drift is seen on the machine that syncs the copy: the header's
-commit is read from that checkout's history, so a stale header fails even when the
-working tree happens to match.
+Runs where `LATENT_WIKI_SRC` names a latent-wiki checkout, or its `src/latent_wiki`;
+skipped elsewhere. This is how drift is seen on the machine that syncs the copy: the
+header's commit is read from that checkout's history, so a stale header fails even when
+the working tree happens to match.
 """
 
 from __future__ import annotations
@@ -25,7 +25,8 @@ def source() -> Path:
     where = os.environ.get("LATENT_WIKI_SRC")
     if not where:
         pytest.skip("LATENT_WIKI_SRC is not set")
-    return Path(where)
+    path = Path(where)
+    return path / "src" / "latent_wiki" if (path / "src").is_dir() else path
 
 
 def _at_commit(source: Path, commit: str, path: str) -> str:

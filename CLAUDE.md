@@ -10,11 +10,12 @@ The root is virtual and is never installed; a colleague installs one member from
   package. A server member copies the read path of the store it serves, verbatim where it can,
   with the source file and commit named in each copied file's header. It never imports the store.
 - **The contract stays with the store.** A server answers the tool contract its store publishes
-  (`latent-wiki`'s `wiki-tools`, `latent-records`' `records-tools`), and adds nothing to it. A member's README names the contract and
-  its version; the fixtures are copies of the store's published-format fixtures.
+  (`latent-wiki`'s `wiki-tools`, `latent-records`' `records-tools`), and adds nothing to it. A
+  member's README names the contract; the fixtures are copies of the store's published-format
+  fixtures.
 - **Same answers as the store's own `serve`,** held by `just conform` and by a byte-identity check of
   the copied files against the store's history when `LATENT_WIKI_SRC` or `LATENT_RECORDS_SRC`
-  points at a checkout.
+  points at a checkout (its root or its `src/<package>`).
 - **Servers are read-only,** stdio first, HTTP behind a bearer token, a deployment folder (local or
   any URI `UPath` opens) as the one argument. Libraries log; only `cli.py` prints.
 - **No client anywhere:** fixtures use invented names, a test greps `src/` for them, and nothing
