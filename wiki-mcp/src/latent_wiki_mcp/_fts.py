@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 991549f, below this header:
+# Verbatim copy of latent-wiki at 28db78d, below this header:
 #   src/latent_wiki/_fts.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import threading
 from dataclasses import dataclass
 
 #: Indexed fields, in order, with their BM25 weights.
@@ -113,10 +114,15 @@ class Ranked:
 
 
 class Index:
-    """An FTS5 table over rows of named fields. One per reader."""
+    """An FTS5 table over rows of named fields. One per reader.
+
+    A server ranks on worker threads, so two searches of one store can arrive at once;
+    one connection serves both, and the lock keeps their queries from interleaving.
+    """
 
     def __init__(self, rows: list[Row]) -> None:
         self._db = sqlite3.connect(":memory:", check_same_thread=False)
+        self._lock = threading.Lock()
         names = ", ".join(name for name, _ in COLUMNS)
         # Porter stemming over unicode61, so "workflows" finds "workflow" and an accent
         # in a query or a page does not decide whether they meet.
@@ -154,11 +160,12 @@ class Index:
         weights = ", ".join(str(weight) for _, weight in COLUMNS)
         out: list[Ranked] = []
         for joiner in (" AND ", " OR "):
-            rows = self._db.execute(
-                f"SELECT rowid, bm25(pages, {weights}) FROM pages "
-                f"WHERE pages MATCH ? ORDER BY bm25(pages, {weights})",
-                (joiner.join(quoted),),
-            ).fetchall()
+            with self._lock:
+                rows = self._db.execute(
+                    f"SELECT rowid, bm25(pages, {weights}) FROM pages "
+                    f"WHERE pages MATCH ? ORDER BY bm25(pages, {weights})",
+                    (joiner.join(quoted),),
+                ).fetchall()
             out = [
                 Ranked(key, -float(score), self._matched_on(key, words))
                 for rowid, score in rows

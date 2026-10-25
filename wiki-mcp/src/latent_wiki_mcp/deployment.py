@@ -5,18 +5,18 @@ opens, such as the copy a store's `just push` writes to a bucket. A server needs
 things from the declaration: `schema_version`, which must be one it knows, and `root:`,
 where the products live, resolved against the folder wherever it is. The wiki is
 `<root>/wiki` and its context `<root>/context`. It also checks `name`, as the store
-does. Everything else in the declaration (inputs, the authored config, briefs) is the
-authoring side's and is not read, so a declaration that grows a key still serves; the
-one typo it catches is a case-variant of `root`, which would otherwise serve the wrong
-folder in silence. A name is refused: looking one up is for the store's own authoring
-commands.
+does: a `name:` that differs from the file's is refused. Everything else in the
+declaration (inputs, the authored config, briefs) is the authoring side's and is not
+read, so a declaration that grows a key still serves; the one typo it catches is a
+case-variant of `root`, which would otherwise serve the wrong folder in silence. A name
+is refused: looking one up is for the store's own authoring commands.
 
 A declaration read from another host is taken as written: a root with `~` or `$VAR` is
 refused rather than expanded with this host's environment, since no other host's values
 could be meant, and a value expanded here could carry this process's secrets into a
 request path.
 
-Adapted from latent-wiki's `deployment.py` (991549f): the same refusals, fewer keys.
+Adapted from latent-wiki's `deployment.py` (28db78d): the same refusals, fewer keys.
 """
 
 from __future__ import annotations
@@ -192,6 +192,13 @@ def _parse(text: str, source: Path) -> Deployment:
     if not NAME.match(name):
         raise DeploymentError(
             f"{source}: name {name!r} must be lowercase letters, digits and hyphens"
+        )
+    # A deployment is `<name>/<name>.yaml`: a different `name:` would make the handle
+    # it is found by and the one it reports two different things.
+    if name != source.stem:
+        raise DeploymentError(
+            f"{source}: name {name!r} is not the file's name {source.stem!r}; a "
+            f"deployment is named by its folder and file, so drop `name:` or rename"
         )
     for key in raw:
         if str(key).lower() == "root" and key != "root":

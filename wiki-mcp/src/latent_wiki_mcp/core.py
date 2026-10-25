@@ -1,6 +1,6 @@
 """The one framework constant the reader needs.
 
-Trimmed from latent-wiki's `core.py` (991549f): the frontmatter keys of the retired
+Trimmed from latent-wiki's `core.py` (28db78d): the frontmatter keys of the retired
 two-file shape, which the reader skips a page for rather than misreading it.
 """
 

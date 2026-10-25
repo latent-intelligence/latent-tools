@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 991549f, below this header:
+# Verbatim copy of latent-wiki at 28db78d, below this header:
 #   src/latent_wiki/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -7,7 +7,7 @@
 The adapter beside the store (house rule: stores own their capability). It adds no
 capability of its own: every tool is `WikiReader`'s, declared once in its tool table and
 dispatched by its `call`, and this module adapts that pair to MCP. The tool contract is
-`docs/formats/wiki-tools.md`.
+`docs/contracts/wiki-tools.md`.
 
 Kept from the first `latent-wiki serve`, because use validated them:
 

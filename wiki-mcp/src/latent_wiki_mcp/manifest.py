@@ -1,6 +1,6 @@
 """The published manifest's names, as the reader needs them.
 
-Trimmed from latent-wiki's `manifest.py` (991549f): the three constants the reader
+Trimmed from latent-wiki's `manifest.py` (28db78d): the three constants the reader
 imports, and nothing that writes a manifest.
 """
 

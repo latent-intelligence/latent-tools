@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 991549f, below this header:
+# Verbatim copy of latent-wiki at 28db78d, below this header:
 #   src/latent_wiki/reader.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -16,12 +16,12 @@ refused**, not loaded through `Store`: publishing is what makes a store readable
 agent sees exactly what any other reader of the format would.
 
 **The contract is a published format**, `latent-wiki.store` v1
-(`docs/formats/wiki-store.md`), stamped in the manifest as `format`/`format_version`. A
-store without the stamp, or with a version this build does not know, is refused loudly
+(`docs/contracts/wiki-store.md`), stamped in the manifest as `format`/`format_version`.
+A store without the stamp, or with a version this build does not know, is refused loudly
 rather than misread quietly. The paired context store is `latent-wiki.context` v1,
 stamped in its `context-store.yaml`.
 
-**This is the one implementation of the wiki tools** (`docs/formats/wiki-tools.md`);
+**This is the one implementation of the wiki tools** (`docs/contracts/wiki-tools.md`);
 `latent-wiki serve` exposes them over MCP. Two measured ranking decisions hold:
 
 - **Filter before rank.** Superseded and deprecated pages are excluded by predicate, not
@@ -158,7 +158,8 @@ class _Page:
     def links(self) -> list[dict[str, str]]:
         """`links:` entries, as `{to, rel, derivation}`. A bare string is a link too."""
         out: list[dict[str, str]] = []
-        for entry in self.raw.get("links") or []:
+        written = self.raw.get("links")
+        for entry in written if isinstance(written, list) else []:
             if isinstance(entry, str):
                 out.append({"to": entry, "rel": "", "derivation": "inferred"})
             elif isinstance(entry, dict) and entry.get("to"):
@@ -762,23 +763,31 @@ class WikiReader:
         """Escalate to source text, paged — the last rung, and it must be bounded.
 
         `key` may be a page — its declared sources first, then the first cited
-        evidence entry's `raw_path` — or a context-store entry, by key.
+        evidence entry's `raw_path` — or a context-store entry, by key. A paired
+        context store is read only once its stamp is checked, as for `evidence`.
         """
         page = self.pages.get(key)
-        candidates: list[tuple[str, Path | None]] = []
+        candidates: list[tuple[str, bool]] = []
         if page is not None:
-            for resource in page.resources():
-                if resource in page.evidence:
-                    candidates.append((resource, self._raw_of_entry(resource)))
-                else:
-                    candidates.append((resource, self._resolve_origin(resource)))
+            candidates = [(r, r in page.evidence) for r in page.resources()]
         elif self.context is not None:
-            candidates.append((key, self._raw_of_entry(key)))
+            candidates = [(key, True)]
         else:
             return f"no page '{key}'"
-        for label, path in candidates:
+        for label, is_entry in candidates:
+            if (
+                is_entry
+                and self.context is not None
+                and (problem := self._check_context())
+            ):
+                return problem
+            path = (
+                self._raw_of_entry(label) if is_entry else self._resolve_origin(label)
+            )
             if path is None:
                 continue
+            if self._in_context(path) and (problem := self._check_context()):
+                return problem
             try:
                 text = path.read_text(encoding="utf-8", errors="replace")
             except (OSError, FileNotFoundError):
@@ -991,6 +1000,12 @@ class WikiReader:
             )
         self._context_checked = True
         return ""
+
+    def _in_context(self, path: Path) -> bool:
+        """Whether `path` lies in the paired context store."""
+        if self.context is None:
+            return False
+        return str(path).startswith(str(self.context).rstrip("/") + "/")
 
     def _summary_path(self, ref: str) -> Path | None:
         key = _bare(ref)

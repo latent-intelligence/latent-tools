@@ -18,7 +18,7 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 **Wiki**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp"
 latent-wiki-mcp --help
 ```
 
@@ -37,7 +37,7 @@ the new release tag.
 Use `uvx` to run either tool without a separate install step:
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.0#subdirectory=wiki-mcp" latent-wiki-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.1#subdirectory=wiki-mcp" latent-wiki-mcp --help
 ```
 
 ```bash
