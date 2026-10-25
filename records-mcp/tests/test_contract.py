@@ -75,3 +75,24 @@ async def test_a_refusal_is_one_line_with_is_error(
     text = content.text  # type: ignore[union-attr]
     assert said in text
     assert "\n" not in text
+
+
+async def test_describe_names_this_package_in_the_install_line(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The one reply that differs from the store's: the extra is this package's."""
+    import json
+
+    from latent_records_mcp.embedders.base import install_line
+    from mcp import Client
+
+    monkeypatch.setattr(
+        "latent_records_mcp.serve.missing_install", lambda _: install_line("clip")
+    )
+    async with Client(build_server(store)) as client:
+        result = await client.call_tool("describe", {})
+    spaces = json.loads(result.content[0].text)["spaces"]  # type: ignore[union-attr]
+    assert spaces
+    for space in spaces.values():
+        assert space["queryable"] is False
+        assert space["install"] == "latent-records-mcp[clip]"
