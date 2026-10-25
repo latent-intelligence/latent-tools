@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at b7ca93c, below this header:
+# Verbatim copy of latent-records at 5a75235, below this header:
 #   src/latent_records/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -8,7 +8,7 @@ Thin over `Store`, read-only, and one ranking per call, as everywhere else. The
 server is built here and run by `latent-records serve`; ``mcp`` is the ``serve``
 extra and is imported only when a server is built. Nothing but the protocol may
 reach stdout, so diagnostics go through logging (stderr). The tool contract is
-`docs/formats/records-tools.md`.
+`docs/contracts/records-tools.md`.
 
 **Keys go under the store's id.** The server's MCP name is the store's ``store_id``,
 and every key a reply names reads ``<store_id>:<key>``, so a client can tell a key

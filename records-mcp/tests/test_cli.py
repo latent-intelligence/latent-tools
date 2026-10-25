@@ -268,6 +268,32 @@ def test_a_remote_root_is_never_expanded_with_this_environment(
     _one_line_refusal(_run("--deployment", pushed), "is a local path")
 
 
+def test_a_variable_holding_a_tilde_resolves_under_home(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Variables first, then `~`, so a `~` a variable holds is a home directory too."""
+    from latent_records_mcp.deployment import resolve_location
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("RECORDS_ROOT", "~/records")
+    resolved = resolve_location("${RECORDS_ROOT}/store", tmp_path / "deployment")
+    assert resolved == (home / "records" / "store").resolve()
+
+
+def test_a_local_root_behind_a_variable_holding_a_tilde_serves(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_records_mcp.deployment import load_deployment_folder
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("RECORDS_HOME", "~/records")
+    _declare(str(folder), "schema_version: 1\nroot: ${RECORDS_HOME}\n")
+    found = load_deployment_folder(str(folder))
+    assert found.store_dir == (home / "records").resolve() / "store"
+
+
 def test_a_name_is_refused(folder: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.chdir(folder.parent)
     _one_line_refusal(_run("--deployment", folder.name), "give the deployment's folder")

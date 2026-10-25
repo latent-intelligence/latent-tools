@@ -5,7 +5,7 @@ same options, the same refusals and the same token variable, so a client configu
 one runs the other. Nothing but the protocol reaches stdout on stdio; diagnostics go
 through logging, to stderr.
 
-Adapted from latent-records' `cli/serve.py` (b7ca93c).
+Adapted from latent-records' `cli/serve.py` (5a75235).
 """
 
 from __future__ import annotations

@@ -1,6 +1,6 @@
 """The Store, read-only: the reader's view of a `latent-records.store` v1 store.
 
-Trimmed from latent-records' `store.py` (b7ca93c) to what a server needs: `Store.open`
+Trimmed from latent-records' `store.py` (5a75235) to what a server needs: `Store.open`
 on a stamped `store.json`, the spaces it describes, status, search, contains and get.
 Nothing here plans or runs a build; that is the store package's.
 """

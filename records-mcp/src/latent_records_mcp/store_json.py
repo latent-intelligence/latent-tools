@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at b7ca93c, below this header:
+# Verbatim copy of latent-records at 5a75235, below this header:
 #   src/latent_records/store_json.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -6,7 +6,7 @@
 
 Written last in every run, so its presence means the tables beside it are complete. A
 reader refuses a store whose stamp is missing or of a version it does not know.
-Specified in `docs/formats/store.md`, with a JSON Schema in `schemas/store.v1.json`.
+Specified in `docs/contracts/store.md`, with a JSON Schema in `schemas/store.v1.json`.
 """
 
 from __future__ import annotations
