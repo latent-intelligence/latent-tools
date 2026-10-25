@@ -70,9 +70,11 @@ def test_raw_refuses_an_unstamped_context(tmp_path: Path) -> None:
 def test_raw_checks_the_stamp_before_reading_an_entry(tmp_path: Path) -> None:
     wiki, context = _copied(tmp_path)
     (context / "context-store.yaml").unlink()
-    text = WikiReader(str(wiki), context=str(context)).raw("kelpmoor-ch01-pools")
+    reader = WikiReader(str(wiki), context=str(context))
+    text = reader.raw("kelpmoor-ch01-pools")
     assert "not published" in text
     assert "Count the limpets." not in text
+    assert "not published" in reader.raw("no-such-entry")
 
 
 def test_raw_refuses_a_declared_source_in_an_unstamped_context(tmp_path: Path) -> None:
