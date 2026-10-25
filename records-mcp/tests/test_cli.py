@@ -97,7 +97,60 @@ def test_insecure_local_is_for_a_loopback_host_only(folder: Path) -> None:
         "--deployment", str(folder), "--transport", "http",
         "--host", "0.0.0.0", "--insecure-local", "--print-config",
     )  # fmt: skip
-    _one_line_refusal(result, TOKEN_ENV)
+    _one_line_refusal(result, "'0.0.0.0' is not a loopback host")
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2"])
+def test_insecure_local_names_the_host_and_says_the_list_is_exact(
+    folder: Path, host: str
+) -> None:
+    result = _run(
+        "--deployment", str(folder), "--transport", "http",
+        "--host", host, "--insecure-local", "--print-config",
+    )  # fmt: skip
+    _one_line_refusal(result, f"{host!r} is not a loopback host")
+    assert "exactly" in result.output
+
+
+def test_a_token_still_serves_any_host_with_insecure_local(
+    folder: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv(TOKEN_ENV, "s3cret")
+    result = _run(
+        "--deployment", str(folder), "--transport", "http",
+        "--host", "0.0.0.0", "--insecure-local", "--print-config",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
+
+
+def test_print_config_under_uvx_warns_that_the_command_is_temporary(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bin_dir = tmp_path / "uv" / "archive-v0" / "AbC123" / "bin"
+    bin_dir.mkdir(parents=True)
+    script = bin_dir / "latent-records-mcp"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr("sys.argv", [str(script)])
+    result = _run("--deployment", str(folder), "--print-config")
+    assert result.exit_code == 0, result.output
+    [entry] = json.loads(result.stdout)["mcpServers"].values()
+    assert entry["command"] == str(script)
+    assert "warning" in result.stderr
+    assert "uv tool install" in result.stderr
+
+
+def test_print_config_from_an_install_does_not_warn(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "bin").mkdir()
+    script = tmp_path / "bin" / "latent-records-mcp"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr("sys.argv", [str(script)])
+    result = _run("--deployment", str(folder), "--print-config")
+    assert result.exit_code == 0, result.output
+    assert "warning" not in result.stderr
 
 
 def test_a_store_without_an_id_is_refused_at_the_cli(folder: Path) -> None:

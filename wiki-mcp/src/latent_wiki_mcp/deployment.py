@@ -16,7 +16,12 @@ refused rather than expanded with this host's environment, since no other host's
 could be meant, and a value expanded here could carry this process's secrets into a
 request path.
 
-Adapted from latent-wiki's `deployment.py` (28db78d): the same refusals, fewer keys.
+Adapted from latent-wiki's `deployment.py` (28db78d), reading fewer keys and so
+refusing less: it serves a declaration the store refuses for lacking `wiki:` or for a
+key the store does not know. It refuses a name, a folder without a declaration, a
+`schema_version` it does not know, a `name:` that differs from the folder's, a
+case-variant of `root`, a remote root that needs this host's environment or disk, and a
+wiki store's own folder given in place of its deployment's.
 """
 
 from __future__ import annotations
@@ -182,6 +187,11 @@ def _parse(text: str, source: Path) -> Deployment:
         ) from exc
     if not isinstance(raw, dict):
         raise DeploymentError(f"{source}: expected a mapping at the top level")
+    if "schema_version" not in raw and "store_id" in raw:
+        raise DeploymentError(
+            f"{source.parent} is a wiki store, not a deployment folder; give the "
+            f"deployment's folder, the one holding <folder name>.yaml"
+        )
     version = raw.get("schema_version")
     if version != SCHEMA_VERSION:
         raise DeploymentError(

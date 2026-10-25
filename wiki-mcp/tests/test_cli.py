@@ -104,7 +104,30 @@ def test_insecure_local_is_for_a_loopback_host_only(deployment: Path) -> None:
         "--deployment", str(deployment), "--transport", "http",
         "--host", "0.0.0.0", "--insecure-local", "--print-config",
     )  # fmt: skip
-    _one_line_refusal(result, "LATENT_WIKI_SERVE_TOKEN")
+    _one_line_refusal(result, "'0.0.0.0' is not a loopback host")
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "127.0.0.2"])
+def test_insecure_local_names_the_host_and_says_the_list_is_exact(
+    deployment: Path, host: str
+) -> None:
+    result = _run(
+        "--deployment", str(deployment), "--transport", "http",
+        "--host", host, "--insecure-local", "--print-config",
+    )  # fmt: skip
+    _one_line_refusal(result, f"{host!r} is not a loopback host")
+    assert "exactly" in result.output
+
+
+def test_a_token_still_serves_any_host_with_insecure_local(
+    deployment: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("LATENT_WIKI_SERVE_TOKEN", "s3cret")
+    result = _run(
+        "--deployment", str(deployment), "--transport", "http",
+        "--host", "0.0.0.0", "--insecure-local", "--print-config",
+    )  # fmt: skip
+    assert result.exit_code == 0, result.output
 
 
 def test_an_unpublished_store_is_refused(deployment: Path) -> None:
@@ -137,6 +160,36 @@ def test_print_config_names_the_store_and_the_folder(deployment: Path) -> None:
     entry = json.loads(result.output)["mcpServers"]["wiki-heronsgate"]
     assert entry["args"][-2:] == ["--deployment", str(deployment)]
     assert Path(entry["command"]).is_absolute()
+
+
+def test_print_config_under_uvx_warns_that_the_command_is_temporary(
+    deployment: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    bin_dir = tmp_path / "uv" / "archive-v0" / "AbC123" / "bin"
+    bin_dir.mkdir(parents=True)
+    script = bin_dir / "latent-wiki-mcp"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr("sys.argv", [str(script)])
+    result = _run("--deployment", str(deployment), "--print-config")
+    assert result.exit_code == 0, result.output
+    entry = json.loads(result.stdout)["mcpServers"]["wiki-heronsgate"]
+    assert entry["command"] == str(script)
+    assert "warning" in result.stderr
+    assert "uv tool install" in result.stderr
+
+
+def test_print_config_from_an_install_does_not_warn(
+    deployment: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    (tmp_path / "bin").mkdir()
+    script = tmp_path / "bin" / "latent-wiki-mcp"
+    script.write_text("#!/bin/sh\n")
+    script.chmod(0o755)
+    monkeypatch.setattr("sys.argv", [str(script)])
+    result = _run("--deployment", str(deployment), "--print-config")
+    assert result.exit_code == 0, result.output
+    assert result.stderr == ""
 
 
 def test_print_config_prints_a_relative_folder_absolute(
@@ -309,6 +362,11 @@ def test_a_folder_without_a_declaration_is_refused(tmp_path: Path, pushed: str) 
     (tmp_path / "empty").mkdir()
     for folder in (str(tmp_path / "empty"), pushed.replace("survey", "absent")):
         _one_line_refusal(_run("--deployment", folder), "no deployment declaration")
+
+
+def test_a_store_folder_is_refused_for_its_deployment_folder(deployment: Path) -> None:
+    result = _run("--deployment", str(deployment / "wiki"))
+    _one_line_refusal(result, "is a wiki store, not a deployment folder")
 
 
 def test_a_declaration_file_is_refused_for_its_folder(deployment: Path) -> None:
