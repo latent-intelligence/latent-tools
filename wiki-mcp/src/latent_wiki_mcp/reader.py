@@ -1,4 +1,4 @@
-# Verbatim copy of latent-wiki at 45b3974, below this header:
+# Verbatim copy of latent-wiki at 068f0cb, below this header:
 #   src/latent_wiki/reader.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -365,7 +365,7 @@ class WikiReader:
                 f"regenerate the store with the tool that built it"
             )
         name, version = STORE_FORMAT
-        if (data.get("format"), data.get("format_version")) != STORE_FORMAT:
+        if not formats.STORE.matches(data):
             found = f"{data.get('format')!r} v{data.get('format_version')!r}"
             raise StoreError(
                 f"{self.id}: {MANIFEST_NAME} is {found}; this build reads {name} "
@@ -1115,7 +1115,7 @@ class WikiReader:
             if isinstance(data, dict)
             else None
         )
-        if found != CONTEXT_FORMAT:
+        if not (isinstance(data, dict) and formats.CONTEXT.matches(data)):
             name, version = CONTEXT_FORMAT
             logger.warning(
                 "%s declares %s, not %s v%s", descriptor, found, name, version
@@ -1131,7 +1131,8 @@ class WikiReader:
         """Whether `path` lies in the paired context store."""
         if self.context is None:
             return False
-        return str(path).startswith(str(self.context).rstrip("/") + "/")
+        here = str(path).replace("\\", "/")
+        return here.startswith(str(self.context).replace("\\", "/").rstrip("/") + "/")
 
     def _summary_path(self, ref: str) -> Path | None:
         if self.context is None or not _single_segment(ref):
