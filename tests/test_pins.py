@@ -41,7 +41,7 @@ def test_readme_install_lines_name_each_members_current_release() -> None:
             "version"
         ]
         for readme in readmes:
-            tags = re.findall(rf"{member.name}-v([\w.]+)", readme.read_text())
+            tags = re.findall(rf"{member.name}-v(\d+(?:\.\d+)*)", readme.read_text())
             stale = [t for t in tags if t != version]
             assert not stale, (
                 f"{readme.relative_to(ROOT)} installs {member.name} at {stale}, "
