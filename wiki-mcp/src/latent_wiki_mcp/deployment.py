@@ -101,6 +101,10 @@ def load_deployment_folder(folder: str) -> Deployment:
         # credentials or a refused request, which would read as no declaration.
         text = source.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
+        if "://" not in folder and directory.is_file():
+            raise DeploymentError(
+                f"{directory} is a file; give the folder that holds it"
+            ) from exc
         raise DeploymentError(f"no deployment declaration at {source}") from exc
     except NotADirectoryError as exc:
         raise DeploymentError(
@@ -146,7 +150,7 @@ def _looks_local(value: str) -> bool:
     """Whether a declared location can only mean the writing host's own disk."""
     if "://" in value:
         return _scheme(value) in LOCAL_SCHEMES
-    return Path(value).is_absolute()
+    return Path(value).is_absolute() or value.startswith(("/", "\\"))
 
 
 def _names_environment(value: str) -> bool:

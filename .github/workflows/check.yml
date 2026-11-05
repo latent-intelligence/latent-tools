@@ -41,4 +41,4 @@ jobs:
       - run: uv run --no-sync ruff check .
       - run: uv run --no-sync ruff format --check .
       - run: uv run --no-sync mypy
-      - run: uv run --no-sync pytest -q
+      - run: uv run --no-sync pytest -q wiki-mcp

@@ -251,7 +251,9 @@ def test_serves_a_deployment_s_folder(
     assert result.exit_code == 0, result.output
     reader = seen["reader"]
     assert reader.id == "heronsgate"
-    assert str(reader.root) == f"{folder}/wiki"
+    from upath import UPath
+
+    assert UPath(str(reader.root)) == UPath(f"{folder}/wiki")
     assert reader._check_context() == ""
     assert reader.search("limpet")
     result = _run("--deployment", folder, "--print-config")
