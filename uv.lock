@@ -1588,7 +1588,7 @@ provides-extras = ["text", "clip", "s3", "gcs", "az"]
 
 [[package]]
 name = "latent-wiki-mcp"
-version = "0.1.2"
+version = "0.1.3"
 source = { editable = "wiki-mcp" }
 dependencies = [
     { name = "fsspec" },

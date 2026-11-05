@@ -112,7 +112,8 @@ def main(
     if print_config:
         if problem := reader._check_context() if reader.context else "":
             err_console.print(f"[yellow]warning[/] {escape(problem)}", soft_wrap=True)
-        argv = [*_launcher(), "--deployment", str(found.path.parent)]
+        folder = deployment if "://" in deployment else str(found.path.parent)
+        argv = [*_launcher(), "--deployment", folder]
         if _in_uv_cache(argv[0]):
             err_console.print(
                 f"[yellow]warning[/] {escape(UV_CACHE_WARNING)}", soft_wrap=True
