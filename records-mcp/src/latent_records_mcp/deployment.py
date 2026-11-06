@@ -18,7 +18,7 @@ is refused rather than expanded with this host's environment, since no other hos
 values could be meant, and a value expanded here could carry this process's secrets into
 a request path.
 
-Adapted from latent-records' `deployment.py` (e6981d2), plus the constants the copied
+Adapted from latent-records' `deployment.py` (fe6e28c), plus the constants the copied
 `store_json` and `embedders` modules import. It reads fewer keys and so refuses less: it
 serves a declaration the store refuses for lacking `store_id` or inputs, for a key the
 store does not know, or for saying `root:`. It refuses a name, a folder without a

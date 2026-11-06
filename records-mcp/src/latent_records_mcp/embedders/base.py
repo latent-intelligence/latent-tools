@@ -1,4 +1,4 @@
-# Verbatim copy of kb-store at 34d6db4, below this header:
+# Verbatim copy of kb-store at fe6e28c, below this header:
 #   src/kb_store/embedders/base.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 

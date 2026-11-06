@@ -1,4 +1,4 @@
-# Verbatim copy of kb-store at 34d6db4, below this header:
+# Verbatim copy of kb-store at fe6e28c, below this header:
 #   src/kb_store/backends/lance.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -96,7 +96,7 @@ def _on_disk(uri: str) -> str | None:
     if parsed.netloc:
         raise StoreError(f"{uri}: a file:// URI with a host is not a path on this host")
     path = parsed.path
-    return path[1:] if DRIVE.match(path[1:3]) else path
+    return path[1:] if os.name == "nt" and DRIVE.match(path[1:3]) else path
 
 
 class LanceBackend:
