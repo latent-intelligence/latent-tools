@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/schema.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/schema.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The Arrow schemas of the store's tables — part of the published format.
@@ -24,8 +24,8 @@ BBOX = pa.list_(pa.float32(), 4)
 
 def _stamp(extra: dict[str, str] | None = None) -> dict[bytes, bytes]:
     meta = {
-        "latent-records.format": STORE.name,
-        "latent-records.format_version": str(STORE.version),
+        "records.format": STORE.name,
+        "records.format_version": str(STORE.version),
         **(extra or {}),
     }
     return {k.encode(): v.encode() for k, v in meta.items()}

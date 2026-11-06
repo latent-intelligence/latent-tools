@@ -35,13 +35,13 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import fsspec  # type: ignore[import-untyped]
 import yaml
 from upath import UPath
 
 from .errors import DeploymentError
+from .locations import location
 
 #: The extra that installs a scheme's filesystem, for the schemes this package is
 #: checked against. Any other scheme fsspec knows works once its filesystem is in.
@@ -93,13 +93,13 @@ NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 @dataclass(frozen=True)
 class Deployment:
     name: str
-    path: Path
-    root: Path
+    path: UPath
+    root: UPath
     declared_root: str = "."
     """``output:`` as written, before its variables were expanded."""
 
     @property
-    def store_dir(self) -> Path:
+    def store_dir(self) -> UPath:
         return self.root / "store"
 
     @property
@@ -111,7 +111,7 @@ def _looks_local(value: str) -> bool:
     """Whether a declared location can only mean the writing host's own disk."""
     if "://" in value:
         return _scheme(value) in LOCAL_SCHEMES
-    return Path(value).is_absolute()
+    return Path(value).is_absolute() or value.startswith(("/", "\\"))
 
 
 def _names_environment(value: str) -> bool:
@@ -119,7 +119,7 @@ def _names_environment(value: str) -> bool:
     return "://" not in value and (value.startswith("~") or "$" in value)
 
 
-def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
+def resolve_location(value: str, base: UPath, *, expand: bool = True) -> UPath:
     """A path from the declaration: a URI as given, anything else against the file."""
     expanded = _expand(value) if expand else value
     if expand and "$" in expanded:
@@ -127,7 +127,7 @@ def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
     if "://" in expanded:
         return _upath(expanded)
     path = Path(expanded)
-    return (path if path.is_absolute() else base / path).resolve()
+    return location(path if path.is_absolute() else base / path).resolve()
 
 
 #: A variable as `os.path.expandvars` reads one: ``$NAME`` or ``${NAME}``.
@@ -146,9 +146,9 @@ def _expand(value: str) -> str:
     return os.path.expanduser(os.path.expandvars(value))
 
 
-def _upath(uri: str) -> Path:
+def _upath(uri: str) -> UPath:
     try:
-        return cast(Path, UPath(uri))
+        return location(uri)
     except ValueError as exc:
         raise DeploymentError(
             f"{uri!r}: {_scheme(uri)}:// is not a scheme fsspec knows"
@@ -170,7 +170,7 @@ def load_deployment_folder(folder: str) -> Deployment:
         require_filesystem(folder)
         directory = _upath(folder)
     else:
-        directory = Path(folder).expanduser().resolve()
+        directory = location(folder)
     if not directory.name:
         raise DeploymentError(
             f"{folder!r} has no name to find its declaration by; give the "
@@ -182,6 +182,10 @@ def load_deployment_folder(folder: str) -> Deployment:
         # credentials or a refused request, which would read as no declaration.
         text = source.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
+        if "://" not in folder and directory.is_file():
+            raise DeploymentError(
+                f"{directory} is a file; give the folder that holds it"
+            ) from exc
         raise DeploymentError(f"no deployment declaration at {source}") from exc
     except NotADirectoryError as exc:
         raise DeploymentError(
@@ -233,7 +237,7 @@ def _yaml_problem(exc: yaml.YAMLError) -> str:
     return text[0] if text else type(exc).__name__
 
 
-def _parse(text: str, source: Path) -> Deployment:
+def _parse(text: str, source: UPath) -> Deployment:
     """A declaration's text, read from `source`: its version, name and output."""
     try:
         raw = yaml.safe_load(text)

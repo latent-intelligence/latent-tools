@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/embedders/base.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/embedders/base.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The embedding seam: what a space needs from a model, and how one is loaded.
@@ -13,7 +13,7 @@ A model fetched on first use is announced on the log before the fetch and after 
 with its size when the hub reports one: a first search can wait minutes for weights.
 
 The device (``cpu``, ``cuda``, ``mps``) is a property of the machine, never of a
-deployment: ``LATENT_RECORDS_DEVICE``, or the best available.
+deployment: ``KB_STORE_DEVICE``, or the best available.
 """
 
 from __future__ import annotations
@@ -34,7 +34,7 @@ from ..errors import EmbedderError
 
 log = logging.getLogger(__name__)
 
-ENV_DEVICE = "LATENT_RECORDS_DEVICE"
+ENV_DEVICE = "KB_STORE_DEVICE"
 
 #: The distribution this code is installed as, read from the package it sits in, so
 #: an install line names the package a user would actually install.

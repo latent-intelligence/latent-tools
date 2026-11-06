@@ -1,7 +1,7 @@
 # latent-records-mcp
 
-A standalone, read-only MCP server over a published `latent-records` store, local or in
-object storage. It answers latent-records' `records-tools` contract: `describe`, `search`,
+A standalone, read-only MCP server over a published `kb-store` store, local or in
+object storage. It answers kb-store' `records-tools` contract: `describe`, `search`,
 `contains`, `get`, and every record as a resource, with nothing of the store package installed.
 
 ## Install
@@ -50,7 +50,7 @@ defaults to the folder itself. An older declaration says `root:` for `output:`, 
 the same. A local declaration's output expands `$VAR` and then `~`, so a variable holding
 `~` resolves under home; a remote declaration's output is taken as written; one that needs
 this host's environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads
-nothing else, so it serves some declarations `latent-records serve` refuses, such as one without
+nothing else, so it serves some declarations `kb-store serve` refuses, such as one without
 `store_id`. `--warm` loads every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
@@ -64,7 +64,7 @@ their values; the client's environment must hold them.
 ## Without internet access
 
 A space's model downloads on its first search. On a machine with no internet access, unpack
-the models beforehand (latent-records' `just models` fills a folder with exactly what a
+the models beforehand (kb-store' `just models` fills a folder with exactly what a
 deployment's spaces load) and set two variables where the server starts:
 
 ```bash
@@ -73,18 +73,18 @@ HF_HUB_OFFLINE=1
 ```
 
 With both set, `--print-config` names them in the stdio block's `env`, as `${VAR}`. The
-latent-records guide `docs/guides/use-a-store-offline.md` covers the client side.
+kb-store guide `docs/guides/use-a-store-offline.md` covers the client side.
 
 ## What it is made of
 
 `serve.py`, `search.py`, `schema.py`, `formats.py`, `store_json.py`, `errors.py`,
-`backends/` and `embedders/` are verbatim copies of latent-records', each naming the source
+`backends/` and `embedders/` are verbatim copies of kb-store', each naming the source
 commit in its first line; `store.py` (the read half), `deployment.py` and `cli.py` are adapted
 from it. The copy is synced from the store, never edited here; `CHANGELOG.md` names the
-commit each release carries. The tool contract and the store format are latent-records'
+commit each release carries. The tool contract and the store format are kb-store'
 (`docs/contracts/records-tools.md` and `store.md` there). The fixture under
-`tests/fixtures/deployments/` is a small store built from latent-records' own fixture
+`tests/fixtures/deployments/` is a small store built from kb-store' own fixture
 deployment with its test embedder, by `scripts/fixture_store.py`.
 
-This server and `latent-records serve` give the same tool answers; the workspace's `just conform`
+This server and `kb-store serve` give the same tool answers; the workspace's `just conform`
 checks that with both installed.

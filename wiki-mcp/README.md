@@ -1,7 +1,7 @@
 # latent-wiki-mcp
 
-A standalone, read-only MCP server over a published `latent-wiki` store, local or `s3://`.
-It answers latent-wiki's `wiki-tools` contract: the same nine tools, every page as a resource,
+A standalone, read-only MCP server over a published `kb-wiki` store, local or `s3://`.
+It answers kb-wiki's `wiki-tools` contract: the same nine tools, every page as a resource,
 the same footers and `cut:` lines, with nothing of the store package installed.
 
 ## Install
@@ -48,12 +48,12 @@ token in `$LATENT_WIKI_SERVE_TOKEN`, unless `--insecure-local` is given with a l
 ## What it is made of
 
 `reader.py`, `_fts.py`, `views.py`, `formats.py` and `serve.py` are verbatim copies of
-latent-wiki's, each naming the source commit in its first line; `manifest.py`, `core.py`
+kb-wiki's, each naming the source commit in its first line; `manifest.py`, `core.py`
 and `errors.py` are trimmed to what the reader imports, each naming its source and
 commit; `deployment.py` and `cli.py` are adapted from it. The copy is synced from the store, never edited here; `CHANGELOG.md`
 names the commit each release carries. The tool contract, the store format and their
-fixtures are latent-wiki's (`docs/contracts/wiki-tools.md`, `wiki-store.md`, `context-store.md`
+fixtures are kb-wiki's (`docs/contracts/wiki-tools.md`, `wiki-store.md`, `context-store.md`
 there); the fixtures under `tests/fixtures/formats/` are copies with invented names.
 
-This server and `latent-wiki serve` give the same tool answers; the workspace's `just conform`
+This server and `kb-wiki serve` give the same tool answers; the workspace's `just conform`
 checks that with both installed.

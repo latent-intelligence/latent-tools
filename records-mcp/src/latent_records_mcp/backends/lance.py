@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/backends/lance.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/backends/lance.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The LanceDB backend. The only module that writes LanceDB SQL.
@@ -32,7 +32,10 @@ COLUMN = re.compile(r"[a-z_][a-z0-9_]*")
 
 REFINE_FACTOR = 10
 
-STAMP = b"latent-records.format_version"
+STAMP = b"records.format_version"
+
+#: A Windows drive, as a URI's host or a path's first segment: ``C:``.
+DRIVE = re.compile(r"^[A-Za-z]:$")
 
 
 def _literal(value: Scalar) -> str:
@@ -74,6 +77,14 @@ def to_sql(where: Filter, schema: pa.Schema) -> str:
     raise StoreError(f"unknown filter {where!r}")
 
 
+def _canonical(uri: str) -> str:
+    """A ``file://`` URI with its drive where a URI keeps it: ``file:///C:/x``. fsspec
+    writes a Windows path ``file://C:/x``, which reads as a host named ``C:``."""
+    if uri.startswith("file://") and DRIVE.match(urlparse(uri).netloc):
+        return "file:///" + uri.removeprefix("file://")
+    return uri
+
+
 def _on_disk(uri: str) -> str | None:
     """The local path a store's URI names, or None for an object store. A ``file://``
     path is read literally, as LanceDB and fsspec read it: ``%20`` is not a space."""
@@ -81,15 +92,16 @@ def _on_disk(uri: str) -> str | None:
         return uri
     if not uri.startswith("file://"):
         return None
-    parsed = urlparse(uri)
+    parsed = urlparse(_canonical(uri))
     if parsed.netloc:
         raise StoreError(f"{uri}: a file:// URI with a host is not a path on this host")
-    return parsed.path
+    path = parsed.path
+    return path[1:] if DRIVE.match(path[1:3]) else path
 
 
 class LanceBackend:
     def __init__(self, uri: str, storage_options: dict[str, str] | None = None):
-        self.uri = uri
+        self.uri = _canonical(uri)
         self._storage_options = storage_options
         self._connection: Any = None
         self._tables: dict[str, Any] = {}

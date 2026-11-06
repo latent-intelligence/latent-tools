@@ -28,7 +28,7 @@ from rich.markup import escape
 from . import __version__
 from . import serve as serving
 from .deployment import NAME, load_deployment_folder, require_filesystem, root_variables
-from .errors import LatentRecordsError
+from .errors import KbStoreError
 from .store import Store, as_store_path
 
 TOKEN_ENV = "LATENT_RECORDS_SERVE_TOKEN"
@@ -101,10 +101,10 @@ def main(
     logging.basicConfig(format="%(message)s")
     logging.getLogger("latent_records_mcp").setLevel(logging.INFO)
     if transport not in ("stdio", "http"):
-        fail(LatentRecordsError(f"--transport is stdio or http, not {transport!r}"))
+        fail(KbStoreError(f"--transport is stdio or http, not {transport!r}"))
     if bool(deployment) == bool(store):
         fail(
-            LatentRecordsError(
+            KbStoreError(
                 "give the deployment's folder (--deployment <folder>) or the store's "
                 "(--store <folder>): one, a local path or any fsspec URI (s3://…)"
             )
@@ -115,11 +115,11 @@ def main(
     if transport == "http" and (
         problem := serving.refuse_http(token, TOKEN_ENV, host, insecure_local)
     ):
-        fail(LatentRecordsError(problem))
+        fail(KbStoreError(problem))
     try:
         found = load_deployment_folder(deployment) if deployment else None
         if store and NAME.match(store):
-            raise LatentRecordsError(
+            raise KbStoreError(
                 f"{store!r} is a name; give the store's folder, a path or a URI "
                 f"(./{store} if it is here)"
             )
@@ -130,15 +130,15 @@ def main(
             opened = Store.open(where)
         # A remote store fails in whatever its client raises.
         except Exception as exc:
-            fail(LatentRecordsError(str(exc) or type(exc).__name__))
+            fail(KbStoreError(str(exc) or type(exc).__name__))
         server = serving.build_server(opened)
-    except (LatentRecordsError, OSError, ImportError) as exc:
+    except (KbStoreError, OSError, ImportError) as exc:
         fail(exc)
     if print_config:
         named = (
-            ["--deployment", str(found.path.parent)]
+            ["--deployment", _as_given(deployment, found.path.parent)]
             if found
-            else ["--store", str(where)]
+            else ["--store", _as_given(store, where)]
         )
         argv = [*_launcher(), *named]
         if _in_uv_cache(argv[0]):
@@ -196,3 +196,9 @@ def _in_uv_cache(command: str) -> bool:
 
 if __name__ == "__main__":
     app()
+
+
+def _as_given(argument: str, resolved: object) -> str:
+    """A URI as the operator typed it, a path made absolute: a `UPath` prints a
+    Windows ``file:///C:/…`` with one slash fewer, which is another host's path."""
+    return argument if "://" in argument else str(resolved)

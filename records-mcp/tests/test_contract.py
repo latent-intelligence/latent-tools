@@ -1,4 +1,4 @@
-"""The tools answer latent-records' `records-tools` contract: these names, these
+"""The tools answer kb-store' `records-tools` contract: these names, these
 arguments, a refusal of one line, and `serverInfo` naming the store and this package's
 version. The table here is the contract as this member knows it."""
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "latent-records-mcp"
 version = "0.2.0"
-description = "A standalone MCP server over a published latent-records store — read-only, local or in object storage."
+description = "A standalone MCP server over a published kb-store store — read-only, local or in object storage."
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{ name = "Latent Intelligence" }]

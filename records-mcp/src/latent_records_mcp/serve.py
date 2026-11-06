@@ -1,11 +1,11 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/serve.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """A store over MCP: search, an exact check, a row by id, and what is there.
 
 Thin over `Store`, read-only, and one ranking per call, as everywhere else. The
-server is built here and run by `latent-records serve`; ``mcp`` is the ``serve``
+server is built here and run by `kb-store serve`; ``mcp`` is the ``serve``
 extra and is imported only when a server is built. Nothing but the protocol may
 reach stdout, so diagnostics go through logging (stderr). The tool contract is
 `docs/contracts/records-tools.md`.
@@ -333,7 +333,7 @@ def build_server(store: Store) -> Any:
     store_id = store_id_of(store)
     keys = Keys(store_id)
     records, total = listing(store)
-    instructions = f"{store.title or 'A latent-records store'}.\n" + (
+    instructions = f"{store.title or 'A kb-store store'}.\n" + (
         INSTRUCTIONS.format(store_id=store_id)
     )
     instructions += guidance(store)
@@ -380,7 +380,7 @@ def build_server(store: Store) -> Any:
                 mime_type="text/markdown",
             )
         )
-    # Open-world, as `latent-wiki serve` declares: a store may sit on object storage, so
+    # Open-world, as `kb-wiki serve` declares: a store may sit on object storage, so
     # a read can leave the machine.
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 

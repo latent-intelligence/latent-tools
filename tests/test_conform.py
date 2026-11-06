@@ -168,7 +168,7 @@ async def test_records_mcp_answers_as_latent_records_serve_does(
 ) -> None:
     """Through a deployment's folder, and through the store's own."""
     where = records_deployment / "store" if given == "--store" else records_deployment
-    store = [*_store_command("latent-records"), "serve", given, str(where)]
+    store = [*_store_command("kb-store"), "serve", given, str(where)]
     tool = [sys.executable, "-m", "latent_records_mcp.cli", given, str(where)]
     theirs = await _replies(store, RECORDS_CALLS)
     ours = await _replies(tool, RECORDS_CALLS)

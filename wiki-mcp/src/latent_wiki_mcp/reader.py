@@ -1,8 +1,8 @@
-# Verbatim copy of latent-wiki at 068f0cb, below this header:
-#   src/latent_wiki/reader.py
+# Verbatim copy of kb-wiki at 7d13913, below this header:
+#   src/kb_wiki/reader.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
-"""A published `latent-wiki` store, read for agents — local or `s3://`.
+"""A published `kb-wiki` store, read for agents — local or `s3://`.
 
 A published store is a versioned artifact::
 
@@ -15,14 +15,14 @@ This reader reads only that, with `json` and `fsspec`. **An unpublished store is
 refused**, not loaded through `Store`: publishing is what makes a store readable, so an
 agent sees exactly what any other reader of the format would.
 
-**The contract is a published format**, `latent-wiki.store` v1
+**The contract is a published format**, `wiki.store` v1
 (`docs/contracts/wiki-store.md`), stamped in the manifest as `format`/`format_version`.
 A store without the stamp, or with a version this build does not know, is refused loudly
-rather than misread quietly. The paired context store is `latent-wiki.context` v1,
+rather than misread quietly. The paired context store is `wiki.context` v1,
 stamped in its `context-store.yaml`.
 
 **This is the one implementation of the wiki tools** (`docs/contracts/wiki-tools.md`);
-`latent-wiki serve` exposes them over MCP. Two measured ranking decisions hold:
+`kb-wiki serve` exposes them over MCP. Two measured ranking decisions hold:
 
 - **Filter before rank.** Superseded and deprecated pages are excluded by predicate, not
   down-weighted. A retired page and its replacement are near-identical by construction,
@@ -117,7 +117,7 @@ REFUSED = (
 )
 UNPUBLISHED_STORE = (
     "{root} has no {manifest}, so it is an unpublished store. Publish it "
-    "(`latent-wiki publish <deployment>`), or point at a published copy."
+    "(`kb-wiki publish <deployment>`), or point at a published copy."
 )
 
 
@@ -254,7 +254,7 @@ class Hit:
 
 
 class WikiReader:
-    """One published `latent-wiki` store. One reader, one store — keys stay unambiguous.
+    """One published `kb-wiki` store. One reader, one store — keys stay unambiguous.
 
     Answers name a page `<store_id>:<key>`, the same form a link into a peer store
     takes, so a page name never reads as an ordinary word. The reader knows no client:
@@ -361,7 +361,7 @@ class WikiReader:
         if declared != MANIFEST_VERSION:
             raise StoreError(
                 f"{self.id}: {MANIFEST_NAME} declares manifest_version {declared}; "
-                f"this build reads {MANIFEST_VERSION} — upgrade latent-wiki, or "
+                f"this build reads {MANIFEST_VERSION} — upgrade kb-wiki, or "
                 f"regenerate the store with the tool that built it"
             )
         name, version = STORE_FORMAT
@@ -384,14 +384,14 @@ class WikiReader:
                 continue
             if RETIRED_PAGE_KEYS & set(raw):
                 # The retired shape: skipped, as `Store.load` skips it, so one old page
-                # does not take the rest of the store with it; `latent-wiki validate`
+                # does not take the rest of the store with it; `kb-wiki validate`
                 # names it.
                 continue
             file = str(entry.get("file") or f"{key}.md")
             if _UNSAFE_RAW.search(file):
                 raise StoreError(
                     f"{self.id}: page '{key}' names {file!r}, which is not inside "
-                    f"{PAGES_DIR}/ — the manifest is not one `latent-wiki manifest` "
+                    f"{PAGES_DIR}/ — the manifest is not one `kb-wiki manifest` "
                     f"wrote"
                 )
             pages[key] = _Page(
@@ -866,7 +866,7 @@ class WikiReader:
             raise Refused(
                 f"no source attached for {key!r} (declared: {declared or 'none'}). "
                 f"Pair this wiki with its material: serve it from its deployment, "
-                f"`latent-wiki serve --deployment <folder>`."
+                f"`kb-wiki serve --deployment <folder>`."
             )
         raise Refused(
             f"no readable source for {key!r} (declared: {declared or 'none'}). "
@@ -1084,7 +1084,7 @@ class WikiReader:
         if self.context is None:
             return (
                 "no context store paired with this wiki: serve it from its "
-                "deployment, `latent-wiki serve --deployment <folder>`, whose context "
+                "deployment, `kb-wiki serve --deployment <folder>`, whose context "
                 "store its pages cite."
             )
         if self._context_checked:

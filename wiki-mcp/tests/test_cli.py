@@ -132,7 +132,7 @@ def test_a_token_still_serves_any_host_with_insecure_local(
 
 def test_an_unpublished_store_is_refused(deployment: Path) -> None:
     (deployment / "wiki" / "manifest.json").unlink()
-    _one_line_refusal(_run("--deployment", str(deployment)), "latent-wiki publish")
+    _one_line_refusal(_run("--deployment", str(deployment)), "kb-wiki publish")
 
 
 def test_the_launcher_is_absolute_wherever_it_was_started(
@@ -461,7 +461,7 @@ async def test_stdout_carries_only_the_protocol(deployment: Path) -> None:
         args=["-m", "latent_wiki_mcp.cli", "--deployment", str(deployment)],
     )
     async with (
-        stdio_client(params) as (read, write),
+        stdio_client(params, errlog=sys.__stderr__ or sys.stderr) as (read, write),
         ClientSession(read, write) as session,
     ):
         init = await session.initialize()

@@ -172,7 +172,7 @@ def test_a_store_without_an_id_is_refused_at_the_cli(folder: Path) -> None:
 
 def test_an_unstamped_store_is_refused(folder: Path) -> None:
     (folder / "store" / "store.json").unlink()
-    _one_line_refusal(_run("--deployment", str(folder)), "not a latent-records store")
+    _one_line_refusal(_run("--deployment", str(folder)), "not a kb-store store")
 
 
 def test_the_launcher_is_absolute_wherever_it_was_started(
@@ -242,7 +242,7 @@ async def _starts(entry: dict[str, Any]) -> None:
 
     params = StdioServerParameters(command=entry["command"], args=entry["args"])
     async with (
-        stdio_client(params, errlog=sys.stderr) as (read, write),
+        stdio_client(params, errlog=sys.__stderr__ or sys.stderr) as (read, write),
         ClientSession(read, write) as session,
     ):
         started = await session.initialize()

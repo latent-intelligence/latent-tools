@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/backends/base.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/backends/base.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The storage seam: what the store needs from a backend, and nothing it does not.

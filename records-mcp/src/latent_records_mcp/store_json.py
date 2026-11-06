@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e6981d2, below this header:
-#   src/latent_records/store_json.py
+# Verbatim copy of kb-store at 34d6db4, below this header:
+#   src/kb_store/store_json.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """`store.json`: the stamp, and the map a reader needs without this package.
@@ -14,8 +14,9 @@ from __future__ import annotations
 import json
 import re
 from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
+
+from upath import UPath
 
 from . import __version__
 from .deployment import NAME
@@ -27,14 +28,14 @@ FILE = "store.json"
 TABLE_NAME = re.compile(r"[a-z0-9_]+")
 
 
-def read_store_json(root: Path) -> dict[str, Any]:
+def read_store_json(root: UPath) -> dict[str, Any]:
     path = root / FILE
     try:
         # Read, never `exists()` first: a filesystem's `exists()` may answer False
         # for missing credentials or a refused request, which would read as no store.
         text = path.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
-        raise FormatError(f"no {FILE} at {root}; not a latent-records store") from exc
+        raise FormatError(f"no {FILE} at {root}; not a kb-store store") from exc
     except Exception as exc:  # a remote read fails in whatever its client raises
         raise StoreError(f"cannot read {path}: {exc}") from exc
     try:
@@ -105,7 +106,7 @@ def build_store_json(
         "store_id": store_id,
         "title": title,
         "generated": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "producer": {"package": "latent-records", "version": __version__},
+        "producer": {"package": "kb-store", "version": __version__},
         "backend": {"kind": "lancedb"},
         "tables": item_tables(counts),
         "spaces": spaces,
@@ -115,5 +116,5 @@ def build_store_json(
     return out
 
 
-def write_store_json(root: Path, data: dict[str, Any]) -> None:
+def write_store_json(root: UPath, data: dict[str, Any]) -> None:
     (root / FILE).write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

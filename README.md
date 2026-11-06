@@ -8,8 +8,8 @@ Install only the tool you need.
 | [wiki-mcp](wiki-mcp/) | Read-only access to a published wiki, stored locally or in S3 |
 | [records-mcp](records-mcp/) | Read-only access to published records, stored locally or in object storage |
 
-These MCP servers are experimental. The existing `latent-wiki serve` and
-`latent-records serve` commands remain the recommended way to serve a store.
+These MCP servers are experimental. The existing `kb-wiki serve` and
+`kb-store serve` commands remain the recommended way to serve a store.
 
 ## Install
 

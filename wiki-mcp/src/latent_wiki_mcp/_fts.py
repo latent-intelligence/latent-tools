@@ -1,5 +1,5 @@
-# Verbatim copy of latent-wiki at 068f0cb, below this header:
-#   src/latent_wiki/_fts.py
+# Verbatim copy of kb-wiki at 7d13913, below this header:
+#   src/kb_wiki/_fts.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """Full-text ranking over a wiki's gist fields, in memory, with the standard library.

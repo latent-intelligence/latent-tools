@@ -1,5 +1,5 @@
-# Verbatim copy of latent-wiki at 068f0cb, below this header:
-#   src/latent_wiki/views.py
+# Verbatim copy of kb-wiki at 7d13913, below this header:
+#   src/kb_wiki/views.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """Views — a generic tree over a store's frontmatter, named by the caller.

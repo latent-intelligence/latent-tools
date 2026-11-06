@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from upath import UPath
 
@@ -19,20 +19,18 @@ from .backends.lance import STAMP as TABLE_STAMP
 from .backends.lance import LanceBackend
 from .errors import FormatError, StoreError
 from .formats import STORE
+from .locations import location
 from .schema import ITEM_TABLES, table_of
 from .search import Hit, Mode, Presence, contains, search
 from .store_json import read_store_json
 
 
 def as_store_path(
-    uri: str | Path, storage_options: dict[str, str] | None = None
-) -> Path:
+    uri: str | Path | UPath, storage_options: dict[str, str] | None = None
+) -> UPath:
     """A store's root: a local path, or a URI opened with the same options as LanceDB,
     so `store.json` is read with the same credentials."""
-    text = str(uri)
-    if "://" in text:
-        return cast(Path, UPath(text, **(storage_options or {})))
-    return Path(text).expanduser().resolve()
+    return location(uri, storage_options)
 
 
 @dataclass(frozen=True)
@@ -65,7 +63,7 @@ def _check_table_stamps(backend: Backend, manifest: dict[str, Any]) -> None:
 
 class Store:
     def __init__(
-        self, root: Path, backend: Backend, *, store_id: str = "", title: str = ""
+        self, root: UPath, backend: Backend, *, store_id: str = "", title: str = ""
     ):
         self.root = root
         self.backend = backend
@@ -75,7 +73,7 @@ class Store:
 
     @classmethod
     def open(
-        cls, uri: str | Path, *, storage_options: dict[str, str] | None = None
+        cls, uri: str | Path | UPath, *, storage_options: dict[str, str] | None = None
     ) -> Store:
         """A store someone built, read through its ``store.json`` alone."""
         root = as_store_path(uri, storage_options)
