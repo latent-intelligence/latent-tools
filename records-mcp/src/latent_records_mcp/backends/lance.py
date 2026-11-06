@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
+# Verbatim copy of latent-records at 02340f3, below this header:
 #   src/latent_records/backends/lance.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -308,6 +308,9 @@ class LanceBackend:
 
     def version(self, name: str) -> int:
         return int(self._table(name).version)
+
+    def refresh(self) -> None:
+        self._tables.clear()
 
     def drop_table(self, name: str) -> None:
         self._tables.pop(name, None)

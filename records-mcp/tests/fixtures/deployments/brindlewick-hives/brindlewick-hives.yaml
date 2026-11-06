@@ -7,7 +7,7 @@ description: Field notes on comb-ledger keeping, for the package tests.
 inputs:
   hive-notes:
     format: doc-intelligence
-    path: ../../doc-intelligence/hive-notes
+    path: input/hive-notes
     artifacts: [text, figures, tables]
 chunking:
   target_tokens: 60

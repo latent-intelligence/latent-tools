@@ -11,7 +11,7 @@ from typing import Any
 
 import pytest
 from latent_records_mcp import __version__
-from latent_records_mcp.cli import TOKEN_ENV, _launcher, app
+from latent_records_mcp.cli import OFFLINE, TOKEN_ENV, _launcher, app
 from typer.testing import CliRunner
 
 from .conftest import STORE_ID
@@ -41,6 +41,8 @@ def _declare(folder: str, text: str) -> None:
 @pytest.fixture(autouse=True)
 def no_token(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv(TOKEN_ENV, raising=False)
+    for name in OFFLINE:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture
@@ -67,13 +69,17 @@ def test_version() -> None:
     assert result.output.strip() == f"latent-records-mcp {__version__}"
 
 
-def test_needs_a_deployment() -> None:
+def test_needs_a_deployment_or_a_store() -> None:
     _one_line_refusal(_run(), "give the deployment's folder")
 
 
-@pytest.mark.parametrize("option", ["--store", "--remote"])
-def test_takes_no_store_or_remote(option: str, folder: Path) -> None:
-    result = _run(option, str(folder))
+def test_takes_a_deployment_or_a_store_not_both(folder: Path) -> None:
+    result = _run("--deployment", str(folder), "--store", str(folder / "store"))
+    _one_line_refusal(result, "one, a local path or any fsspec URI")
+
+
+def test_takes_no_remote(folder: Path) -> None:
+    result = _run("--remote", str(folder))
     assert result.exit_code == 2 and "No such option" in result.output
 
 
@@ -266,6 +272,49 @@ async def test_print_config_for_a_folder_is_a_block_that_starts(
     await _starts(entry)
 
 
+@pytest.mark.parametrize("form", ["path", "file"])
+async def test_print_config_for_a_store_alone_is_a_block_that_starts(
+    form: str, folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A store copied away from its deployment serves by its own folder."""
+    import shutil
+
+    moved = tmp_path / "moved" / "hives-store"
+    shutil.copytree(folder / "store", moved)
+    shutil.rmtree(folder)
+    monkeypatch.setattr("sys.argv", ["cli.py"])
+    where = _folder(form, moved)
+    result = _run("--store", where, "--print-config")
+    assert result.exit_code == 0, result.output
+    entry: dict[str, Any] = json.loads(result.output)["mcpServers"][
+        f"records-{STORE_ID}"
+    ]
+    assert entry["args"][-2] == "--store"
+    await _starts(entry)
+
+
+def test_a_store_given_by_name_is_refused(
+    folder: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(folder)
+    _one_line_refusal(_run("--store", "store"), "is a name; give the store's folder")
+
+
+def test_print_config_names_the_offline_variables_never_their_values(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HF_HUB_CACHE", str(tmp_path / "models"))
+    monkeypatch.setenv("HF_HUB_OFFLINE", "1")
+    result = _run("--store", str(folder / "store"), "--print-config")
+    assert result.exit_code == 0, result.output
+    entry = json.loads(result.output)["mcpServers"][f"records-{STORE_ID}"]
+    assert entry["env"] == {
+        "HF_HUB_CACHE": "${HF_HUB_CACHE}",
+        "HF_HUB_OFFLINE": "${HF_HUB_OFFLINE}",
+    }
+    assert str(tmp_path / "models") not in result.output
+
+
 def test_print_config_prints_a_relative_folder_absolute(
     folder: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -308,15 +357,25 @@ def test_malformed_yaml_is_one_line(folder: Path) -> None:
     assert "line 3, column 1" in result.output
 
 
-def test_a_case_variant_of_root_is_refused(folder: Path) -> None:
-    _declare(str(folder), "schema_version: 1\nRoot: elsewhere\n")
-    _one_line_refusal(_run("--deployment", str(folder)), "did you mean root")
+@pytest.mark.parametrize("key", ["Output", "Root"])
+def test_a_case_variant_of_output_is_refused(key: str, folder: Path) -> None:
+    _declare(str(folder), f"schema_version: 1\n{key}: elsewhere\n")
+    _one_line_refusal(_run("--deployment", str(folder)), "did you mean output")
 
 
-def test_root_resolves_against_the_folder_wherever_it_is(pushed: str) -> None:
+def test_output_and_root_together_are_refused(folder: Path) -> None:
+    _declare(str(folder), "schema_version: 1\noutput: .\nroot: .\n")
+    _one_line_refusal(_run("--deployment", str(folder)), "keep output")
+
+
+@pytest.mark.parametrize("key", ["output", "root"])
+def test_output_resolves_against_the_folder_wherever_it_is(
+    key: str, pushed: str
+) -> None:
+    """`root:` is output's older name: a declaration written before still serves."""
     from latent_records_mcp.deployment import load_deployment_folder
 
-    _declare(pushed, "schema_version: 1\nroot: products\n")
+    _declare(pushed, f"schema_version: 1\n{key}: products\n")
     found = load_deployment_folder(pushed)
     assert str(found.store_dir) == f"{pushed}/products/store"
     assert found.is_remote

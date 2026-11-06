@@ -3,10 +3,10 @@
   "format_version": 1,
   "store_id": "brindlewick-hives",
   "title": "Brindlewick Apiary",
-  "generated": "2026-10-21T01:15:07Z",
+  "generated": "2026-11-06T12:43:27Z",
   "producer": {
     "package": "latent-records",
-    "version": "0.2.0"
+    "version": "0.2.1"
   },
   "backend": {
     "kind": "lancedb"
@@ -55,6 +55,21 @@
       "path": "tables.lance",
       "key": "id",
       "rows": 2,
+      "parent": "records",
+      "text_column": "text",
+      "fts": true,
+      "provenance": [
+        "record_id",
+        "key",
+        "page",
+        "bbox"
+      ]
+    },
+    "equations": {
+      "table": "equations",
+      "path": "equations.lance",
+      "key": "id",
+      "rows": 0,
       "parent": "records",
       "text_column": "text",
       "fts": true,
@@ -128,5 +143,11 @@
         }
       }
     }
+  },
+  "chunking": {
+    "target_tokens": 60,
+    "max_tokens": 120,
+    "overlap_tokens": 10,
+    "heading_depth": 3
   }
 }

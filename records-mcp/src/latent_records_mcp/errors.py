@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
+# Verbatim copy of latent-records at 02340f3, below this header:
 #   src/latent_records/errors.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -27,3 +27,7 @@ class FormatError(LatentRecordsError):
 
 class EmbedderError(LatentRecordsError):
     """An embedder cannot be loaded or cannot do what a space asks of it."""
+
+
+class LockedError(StoreError):
+    """Another writer holds the store's lock."""

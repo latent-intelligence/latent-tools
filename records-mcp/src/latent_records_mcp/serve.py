@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
+# Verbatim copy of latent-records at 02340f3, below this header:
 #   src/latent_records/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -39,10 +39,10 @@ from typing import Any, cast
 
 from . import __version__
 from .backends.base import Eq
-from .deployment import TARGETS
 from .embedders.base import load_embedder, missing_install
 from .errors import FormatError
-from .search import MODES, PRESENCE_TABLES, Hit, Mode
+from .schema import TARGETS, presence_tables
+from .search import MODES, Hit, Mode, covering
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -133,12 +133,8 @@ def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
         "media_path": hit.media_path,
         "refs": keys.names(hit.refs),
         "referenced_by": keys.names(hit.referenced_by),
+        **({"citation": hit.citation} if hit.citation else {}),
     }
-
-
-def covering(spaces: Mapping[str, Any], target: str) -> list[str]:
-    """The spaces with vectors for a target, by name."""
-    return sorted(n for n, s in spaces.items() if target in (s.get("targets") or {}))
 
 
 def recommended(spaces: Mapping[str, Any]) -> dict[str, str]:
@@ -178,7 +174,7 @@ def describe(store: Store) -> dict[str, Any]:
         "spaces": spaces,
         "recommended": recommended(store.spaces),
         "modes": list(MODES),
-        "contains_tables": list(PRESENCE_TABLES),
+        "contains_tables": list(presence_tables()),
     }
 
 
@@ -421,9 +417,10 @@ def build_server(store: Store) -> Any:
         record_id: str | None = None,
         expand_refs: bool = False,
     ) -> str:
-        """Rank one target (chunks, tables, figure_captions, figure_images) in one
-        space by vector, fts or hybrid, 1 to 50 hits. Name a space when several cover
-        the target (see describe); figure_images take mode "vector" only."""
+        """Rank one target (chunks, tables, figure_captions, equations,
+        figure_images) in one space by vector, fts or hybrid, 1 to 50 hits. Name a
+        space when several cover the target (see describe); figure_images take mode
+        "vector" only."""
         if mode not in MODES:
             raise ToolError(f"mode must be one of {list(MODES)}")
         if not 1 <= limit <= MAX_LIMIT:
@@ -431,7 +428,7 @@ def build_server(store: Store) -> Any:
         if not query.strip():
             raise ToolError("give a query: words to rank by")
         # Images take vector search only; search says so before choosing a space.
-        image = target in TARGETS and TARGETS[target][0] == "image"
+        image = target in TARGETS and TARGETS[target].modality == "image"
         if not space and (mode == "vector" or (mode == "hybrid" and not image)):
             several = covering(store.spaces, target)
             if len(several) > 1:
@@ -471,9 +468,7 @@ def build_server(store: Store) -> Any:
         where. total 0 means it does not occur."""
         within = scope(record_id)
         found = guarded(
-            lambda: store.contains(
-                phrase, tables=tables or PRESENCE_TABLES, record_id=within
-            )
+            lambda: store.contains(phrase, tables=tables or None, record_id=within)
         )
         return json.dumps(
             {

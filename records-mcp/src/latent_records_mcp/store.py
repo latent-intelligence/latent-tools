@@ -1,8 +1,8 @@
 """The Store, read-only: the reader's view of a `latent-records.store` v1 store.
 
-Trimmed from latent-records' `store.py` (e9eb62a) to what a server needs: `Store.open`
+Trimmed from latent-records' `store.py` (02340f3) to what a server needs: `Store.open`
 on a stamped `store.json`, the spaces it describes, status, search, contains and get.
-Nothing here plans or runs a build; that is the store package's.
+Nothing here plans, writes or locks; that is the store package's.
 """
 
 from __future__ import annotations
@@ -19,15 +19,19 @@ from .backends.lance import STAMP as TABLE_STAMP
 from .backends.lance import LanceBackend
 from .errors import FormatError, StoreError
 from .formats import STORE
-from .schema import ITEM_TABLES
-from .search import PRESENCE_TABLES, Hit, Mode, Presence, contains, search
+from .schema import ITEM_TABLES, table_of
+from .search import Hit, Mode, Presence, contains, search
 from .store_json import read_store_json
 
 
-def as_store_path(uri: str | Path) -> Path:
+def as_store_path(
+    uri: str | Path, storage_options: dict[str, str] | None = None
+) -> Path:
+    """A store's root: a local path, or a URI opened with the same options as LanceDB,
+    so `store.json` is read with the same credentials."""
     text = str(uri)
     if "://" in text:
-        return cast(Path, UPath(text))
+        return cast(Path, UPath(text, **(storage_options or {})))
     return Path(text).expanduser().resolve()
 
 
@@ -74,7 +78,7 @@ class Store:
         cls, uri: str | Path, *, storage_options: dict[str, str] | None = None
     ) -> Store:
         """A store someone built, read through its ``store.json`` alone."""
-        root = as_store_path(uri)
+        root = as_store_path(uri, storage_options)
         manifest = read_store_json(root)
         backend = LanceBackend(str(root), storage_options)
         _check_table_stamps(backend, manifest)
@@ -137,7 +141,7 @@ class Store:
         self,
         phrase: str,
         *,
-        tables: Sequence[str] = PRESENCE_TABLES,
+        tables: Sequence[str] | None = None,
         record_id: str | None = None,
     ) -> Presence:
         """Where the phrase occurs, exactly; absence is an answer."""
@@ -145,14 +149,10 @@ class Store:
 
     def get(self, item_id: str) -> dict[str, Any] | None:
         """One row by id: a record id, or a chunk, figure or table id."""
-        kinds = {"chunk": "chunks", "figure": "figures", "table": "tables"}
-        parts = item_id.split("::")
-        if len(parts) == 3 and parts[1] in kinds:
-            name, key = kinds[parts[1]], "id"
-        elif len(parts) == 1:
-            name, key = "records", "record_id"
-        else:
+        name = table_of(item_id)
+        if name is None:
             raise StoreError(f"{item_id!r} is not a record, chunk, figure or table id")
+        key = ITEM_TABLES[name].key
         if name not in self.backend.table_names():
             return None
         rows = self.backend.read(name, where=Eq(key, item_id)).to_pylist()

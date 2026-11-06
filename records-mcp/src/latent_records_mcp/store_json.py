@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
+# Verbatim copy of latent-records at 02340f3, below this header:
 #   src/latent_records/store_json.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -93,9 +93,14 @@ def item_tables(counts: dict[str, int]) -> dict[str, Any]:
 
 
 def build_store_json(
-    *, store_id: str, title: str, counts: dict[str, int], spaces: dict[str, Any]
+    *,
+    store_id: str,
+    title: str,
+    counts: dict[str, int],
+    spaces: dict[str, Any],
+    chunking: dict[str, int] | None = None,
 ) -> dict[str, Any]:
-    return {
+    out: dict[str, Any] = {
         **STORE.stamp(),
         "store_id": store_id,
         "title": title,
@@ -105,6 +110,9 @@ def build_store_json(
         "tables": item_tables(counts),
         "spaces": spaces,
     }
+    if chunking is not None:
+        out["chunking"] = chunking
+    return out
 
 
 def write_store_json(root: Path, data: dict[str, Any]) -> None:

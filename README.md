@@ -25,7 +25,7 @@ latent-wiki-mcp --help
 **Records**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
 latent-records-mcp --help
 ```
 
@@ -41,7 +41,7 @@ uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.
 ```
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp" latent-records-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp" latent-records-mcp --help
 ```
 
 `uvx` runs the tool from uv's cache, which `uv cache clean` or `uv cache prune` removes. So

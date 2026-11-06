@@ -7,7 +7,7 @@ object storage. It answers latent-records' `records-tools` contract: `describe`,
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
 ```
 
 Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `text`
@@ -15,7 +15,7 @@ Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `
 whose space needs a model you did not install says so on the first search.
 
 ```bash
-uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
+uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.
@@ -23,27 +23,46 @@ To move to a new release, run the line with the new tag; the tool is replaced wi
 ## Run
 
 ```bash
-latent-records-mcp --deployment <folder>                 # stdio: what a client starts
-latent-records-mcp --deployment <folder> --print-config  # the mcpServers block to paste in
-claude mcp add records-brindlewick-hives -- latent-records-mcp --deployment <folder> --warm
+latent-records-mcp --store <store>                       # stdio: what a client starts
+latent-records-mcp --store <store> --print-config        # the mcpServers block to paste in
+latent-records-mcp --deployment <folder>                 # or a deployment's store
+claude mcp add records-brindlewick-hives -- latent-records-mcp --store <store> --warm
 ```
 
-`<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
-fsspec opens. The server reads the declaration's `schema_version`, `name` and `root:` and
-serves `<root>/store`, which must carry a stamped `store.json` with a `store_id`. A local
-declaration's root expands `$VAR` and then `~`, so a variable holding `~` resolves under home;
-a remote declaration's root is taken as written; one that needs this host's environment (`~`, `$VAR`)
-or its disk (an absolute path) is refused. It reads nothing else, so it serves some
-declarations `latent-records serve` refuses, such as one without `store_id`. `--warm` loads
-every space's model in the background at start.
+`<store>` is a store's own folder, a local path or any URI fsspec opens; it must carry a
+stamped `store.json` with a `store_id`, which names everything a server needs. Give it to
+serve a store wherever it was copied, with or without the deployment that built it.
+
+`<folder>` is a deployment's folder, holding `<folder name>.yaml`. The server reads the
+declaration's `schema_version`, `name` and `output:` and serves `<output>/store`; a
+declaration written before 0.2.0 says `root:` for `output:`, and serves the same. A local
+declaration's output expands `$VAR` and then `~`, so a variable holding `~` resolves under
+home; a remote declaration's output is taken as written; one that needs this host's
+environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads nothing else,
+so it serves some declarations `latent-records serve` refuses, such as one without
+`store_id`. `--warm` loads every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
 bearer token in `$LATENT_RECORDS_SERVE_TOKEN`, unless `--insecure-local` is given with a
 loopback host: exactly `127.0.0.1`, `localhost` or `::1` (or `[::1]`).
 
 `--print-config` prints the block after opening the store, so it is one that starts. When
-`root:` names environment variables, the stdio block lists them in `env` as `${VAR}`, never
+`output:` names environment variables, the stdio block lists them in `env` as `${VAR}`, never
 their values; the client's environment must hold them.
+
+## Without internet access
+
+A space's model downloads on its first search. On a machine with no internet access, unpack
+the models beforehand (latent-records' `just models` fills a folder with exactly what a
+store's spaces load) and set two variables where the server starts:
+
+```bash
+HF_HUB_CACHE=<the unpacked models folder>
+HF_HUB_OFFLINE=1
+```
+
+With both set, `--print-config` names them in the stdio block's `env`, as `${VAR}`. The
+latent-records guide `docs/guides/use-a-store-offline.md` covers the client side.
 
 ## What it is made of
 
