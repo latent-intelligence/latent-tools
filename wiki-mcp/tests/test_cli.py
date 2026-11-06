@@ -261,10 +261,16 @@ def test_serves_a_deployment_s_folder(
     assert entry["args"][-2:] == ["--deployment", folder]
 
 
-def test_root_resolves_against_the_folder_wherever_it_is(pushed: str) -> None:
+@pytest.mark.parametrize("key", ["output", "root"])
+def test_output_resolves_against_the_folder_wherever_it_is(
+    key: str, pushed: str
+) -> None:
+    """`root:` is output's older name: a declaration written before still serves."""
     from latent_wiki_mcp.deployment import load_deployment_folder
 
-    _declare(pushed, "schema_version: 1\nroot: products\nwiki: {config: wiki.yaml}\n")
+    _declare(
+        pushed, f"schema_version: 1\n{key}: products\nwiki: {{config: wiki.yaml}}\n"
+    )
     found = load_deployment_folder(pushed)
     assert str(found.wiki_dir) == f"{pushed}/products/wiki"
     assert str(found.context_dir) == f"{pushed}/products/context"
@@ -284,7 +290,7 @@ def test_a_uri_folder_is_never_collapsed_to_a_local_path(deployment: Path) -> No
     assert str(found.wiki_dir) == "memory://survey/wiki"
 
 
-def test_reads_only_the_version_and_the_root(pushed: str) -> None:
+def test_reads_only_the_version_and_the_output(pushed: str) -> None:
     """Inputs that exist nowhere, and keys this server has no use for, do not stop a
     server that never reads them: the authoring side owns them."""
     _declare(
@@ -304,19 +310,25 @@ def test_malformed_yaml_is_one_line(deployment: Path) -> None:
     assert "line 3, column 1" in result.output
 
 
-def test_a_case_variant_of_root_is_refused(deployment: Path) -> None:
-    _declare(str(deployment), "schema_version: 1\nRoot: elsewhere\n")
-    _one_line_refusal(_run("--deployment", str(deployment)), "did you mean root")
+@pytest.mark.parametrize("key", ["Output", "Root"])
+def test_a_case_variant_of_output_is_refused(key: str, deployment: Path) -> None:
+    _declare(str(deployment), f"schema_version: 1\n{key}: elsewhere\n")
+    _one_line_refusal(_run("--deployment", str(deployment)), "did you mean output")
 
 
-def test_a_remote_root_is_never_expanded_with_this_environment(
+def test_output_and_root_together_are_refused(deployment: Path) -> None:
+    _declare(str(deployment), "schema_version: 1\noutput: .\nroot: .\n")
+    _one_line_refusal(_run("--deployment", str(deployment)), "keep output")
+
+
+def test_a_remote_output_is_never_expanded_with_this_environment(
     pushed: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """`$VAR` in a remote declaration is refused as local notation, and never carries
     this process's environment into a request path."""
     monkeypatch.setenv("LATENT_WIKI_SERVE_TOKEN", "sekrit")
     for root in ("x-${LATENT_WIKI_SERVE_TOKEN}", "$HOME/wikis", "~/wikis"):
-        _declare(pushed, f"schema_version: 1\nroot: {root}\n")
+        _declare(pushed, f"schema_version: 1\noutput: {root}\n")
         result = _run("--deployment", pushed)
         _one_line_refusal(result, "names this host's environment")
         assert "sekrit" not in result.output
@@ -340,7 +352,7 @@ def test_an_unknown_schema_version_is_refused(deployment: Path) -> None:
     _one_line_refusal(_run("--deployment", str(deployment)), "schema_version 2")
 
 
-def test_a_local_folder_may_keep_its_root_on_local_disk(
+def test_a_local_folder_may_keep_its_output_on_local_disk(
     deployment: Path, tmp_path: Path
 ) -> None:
     from latent_wiki_mcp.deployment import load_deployment_folder
@@ -349,7 +361,7 @@ def test_a_local_folder_may_keep_its_root_on_local_disk(
     shutil.move(str(deployment / "wiki"), moved / "wiki")
     _declare(
         deployment.as_uri(),
-        f"schema_version: 1\nroot: {moved}\nwiki: {{config: wiki.yaml}}\n",
+        f"schema_version: 1\noutput: {moved}\nwiki: {{config: wiki.yaml}}\n",
     )
     found = load_deployment_folder(deployment.as_uri())
     assert str(found.wiki_dir) == str(moved / "wiki")
@@ -393,14 +405,14 @@ def test_a_failed_read_says_why(pushed: str, monkeypatch: pytest.MonkeyPatch) ->
     assert "no deployment" not in result.output
 
 
-def test_a_remote_declaration_with_a_local_root_is_refused(pushed: str) -> None:
+def test_a_remote_declaration_with_a_local_output_is_refused(pushed: str) -> None:
     for root in (
         "/srv/wikis/survey",
         "file:///srv/wikis/survey",
         "simplecache::file:///srv/wikis/survey",
     ):
         _declare(
-            pushed, f"schema_version: 1\nroot: {root}\nwiki: {{config: wiki.yaml}}\n"
+            pushed, f"schema_version: 1\noutput: {root}\nwiki: {{config: wiki.yaml}}\n"
         )
         _one_line_refusal(_run("--deployment", pushed), "is a local path")
 
@@ -424,7 +436,7 @@ def test_a_scheme_fsspec_does_not_know_is_refused(deployment: Path) -> None:
     )
     _declare(
         str(deployment),
-        "schema_version: 1\nroot: nosuchscheme://x/y\nwiki: {config: wiki.yaml}\n",
+        "schema_version: 1\noutput: nosuchscheme://x/y\nwiki: {config: wiki.yaml}\n",
     )
     _one_line_refusal(_run("--deployment", str(deployment)), "not a scheme")
 

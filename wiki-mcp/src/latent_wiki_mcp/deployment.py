@@ -2,27 +2,28 @@
 
 A deployment is a folder holding `<folder name>.yaml`: a local path, or any URI fsspec
 opens, such as the copy a store's `just push` writes to a bucket. A server needs two
-things from the declaration: `schema_version`, which must be one it knows, and `root:`,
-where the products live, resolved against the folder wherever it is. The wiki is
-`<root>/wiki` and its context `<root>/context`. It also checks `name`, as the store
-does: a `name:` that differs from the file's is refused. Everything else in the
-declaration (inputs, the authored config, briefs) is the authoring side's and is not
-read, so a declaration that grows a key still serves; the one typo it catches is a
-case-variant of `root`, which would otherwise serve the wrong folder in silence. A name
-is refused: looking one up is for the store's own authoring commands.
+things from the declaration: `schema_version`, which must be one it knows, and
+`output:`, where the products live, resolved against the folder wherever it is. The wiki
+is `<output>/wiki` and its context `<output>/context`. An older declaration says `root:`
+for `output:`, and serves the same; one that says both is refused. It also checks
+`name`, as the store does: a `name:` that differs from the file's is refused. Everything
+else in the declaration (inputs, the authored config, briefs) is the authoring side's
+and is not read, so a declaration that grows a key still serves; the one typo it catches
+is a case-variant of `output` or `root`, which would otherwise serve the wrong folder in
+silence. A name is refused: looking one up is for the store's own authoring commands.
 
-A declaration read from another host is taken as written: a root with `~` or `$VAR` is
-refused rather than expanded with this host's environment, since no other host's values
-could be meant, and a value expanded here could carry this process's secrets into a
-request path.
+A declaration read from another host is taken as written: an output with `~` or `$VAR`
+is refused rather than expanded with this host's environment, since no other host's
+values could be meant, and a value expanded here could carry this process's secrets into
+a request path.
 
-Adapted from latent-wiki's `deployment.py` (45b3974), reading fewer keys and so
-refusing less: it serves a declaration the store refuses for lacking `wiki:` or for a
-key the store does not know. It refuses a name, a folder without a declaration, a
-`schema_version` it does not know, a `name:` that differs from the folder's, a
-case-variant of `root`, a remote root that needs this host's environment or disk, a
-URI scheme this install cannot open, and a wiki store's own folder given in place of its
-deployment's.
+Adapted from kb-wiki's `deployment.py` (7d13913), reading fewer keys and so refusing
+less: it serves a declaration the store refuses for lacking `wiki:`, for a key the store
+does not know, or for saying `root:`. It refuses a name, a folder without a declaration,
+a `schema_version` it does not know, a `name:` that differs from the folder's, a
+case-variant of `output` or `root`, both together, a remote output that needs this
+host's environment or disk, a URI scheme this install cannot open, and a wiki store's
+own folder given in place of its deployment's.
 """
 
 from __future__ import annotations
@@ -77,7 +78,7 @@ def as_path(value: Any) -> Path:
 def load_deployment_folder(folder: str) -> Deployment:
     """Load the deployment whose folder is `folder`, for serving its wiki.
 
-    A declaration read from another host may not put `root:` on this host's disk:
+    A declaration read from another host may not put `output:` on this host's disk:
     no other host could follow it.
     """
     if NAME.match(folder):
@@ -183,7 +184,7 @@ def _yaml_problem(exc: yaml.YAMLError) -> str:
 
 
 def _parse(text: str, source: Path) -> Deployment:
-    """A declaration's text, read from `source`: its version, name and root."""
+    """A declaration's text, read from `source`: its version, name and output."""
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -216,20 +217,27 @@ def _parse(text: str, source: Path) -> Deployment:
             f"deployment is named by its folder and file, so drop `name:` or rename"
         )
     for key in raw:
-        if str(key).lower() == "root" and key != "root":
-            raise DeploymentError(f"{source}: {key!r} is not a key; did you mean root?")
+        lowered = str(key).lower()
+        if lowered in ("output", "root") and key != lowered:
+            raise DeploymentError(
+                f"{source}: {key!r} is not a key; did you mean output?"
+            )
+    if "output" in raw and "root" in raw:
+        raise DeploymentError(
+            f"{source}: output and root name one thing; keep output, root's newer name"
+        )
     base = source.parent
-    declared = str(raw.get("root") or ".")
+    declared = str(raw.get("output") or raw.get("root") or ".")
     remote = not _on_this_host(str(source))
     if remote and _names_environment(declared):
         raise DeploymentError(
-            f"{source}: root {declared!r} names this host's environment; a remote "
-            f"deployment's root is taken as written, relative to its folder or a URI"
+            f"{source}: output {declared!r} names this host's environment; a remote "
+            f"deployment's output is taken as written, relative to its folder or a URI"
         )
     if remote and _looks_local(declared):
         raise DeploymentError(
-            f"{source}: root {declared!r} is a local path; a remote deployment's "
-            f"root is relative to its folder, or a remote URI"
+            f"{source}: output {declared!r} is a local path; a remote deployment's "
+            f"output is relative to its folder, or a remote URI"
         )
     return Deployment(
         name=name, path=source, root=resolve_location(declared, base, expand=not remote)

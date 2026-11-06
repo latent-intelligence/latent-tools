@@ -47,3 +47,18 @@ def test_readme_install_lines_name_each_members_current_release() -> None:
                 f"{readme.relative_to(ROOT)} installs {member.name} at {stale}, "
                 f"but its pyproject.toml says {version}"
             )
+
+
+def test_every_members_version_is_the_same_in_its_package() -> None:
+    """`--version` reports `__version__`, so it must say what pyproject.toml says."""
+    for member in members():
+        version = tomllib.loads((member / "pyproject.toml").read_text())["project"][
+            "version"
+        ]
+        inits = list((member / "src").glob("*/__init__.py"))
+        assert len(inits) == 1, inits
+        found = re.search(r'__version__ = "([^"]+)"', inits[0].read_text())
+        assert found and found.group(1) == version, (
+            f"{inits[0].relative_to(ROOT)} says {found and found.group(1)}, "
+            f"but pyproject.toml says {version}"
+        )

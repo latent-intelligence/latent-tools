@@ -45,20 +45,24 @@ def anyio_backend() -> str:
     return "asyncio"
 
 
-@pytest.fixture
-def wiki_deployment(tmp_path: Path) -> Path:
-    root = tmp_path / "survey"
+@pytest.fixture(params=[".", "products"])
+def wiki_deployment(request: pytest.FixtureRequest, tmp_path: Path) -> Path:
+    """The products in the deployment's folder, `output:`'s default, or below it."""
+    folder = tmp_path / "survey"
+    root = folder / request.param
     shutil.copytree(FORMATS / "wiki-store", root / "wiki")
     shutil.copytree(FORMATS / "context-store", root / "context")
-    shutil.copy(root / "wiki" / "wiki.yaml", root / "wiki.yaml")
-    (root / "survey.yaml").write_text("schema_version: 1\nwiki: {config: wiki.yaml}\n")
+    shutil.copy(root / "wiki" / "wiki.yaml", folder / "wiki.yaml")
+    (folder / "survey.yaml").write_text(
+        f"schema_version: 1\noutput: {request.param}\nwiki: {{config: wiki.yaml}}\n"
+    )
     manifest = root / "wiki" / "manifest.json"
     data = json.loads(manifest.read_text())
     for entry in data["pages"]:
         if entry["key"] == "count-limpets":
             entry["frontmatter"]["part_of"] = "tide-pool"
     manifest.write_text(json.dumps(data))
-    return root
+    return folder
 
 
 async def _replies(
@@ -100,11 +104,11 @@ def _store_command(name: str) -> list[str]:
     return [found]
 
 
-async def test_wiki_mcp_answers_as_latent_wiki_serve_does(
+async def test_wiki_mcp_answers_as_kb_wiki_serve_does(
     wiki_deployment: Path,
 ) -> None:
     store = [
-        *_store_command("latent-wiki"),
+        *_store_command("kb-wiki"),
         "serve",
         "--deployment",
         str(wiki_deployment),
@@ -125,7 +129,7 @@ async def test_wiki_mcp_answers_as_latent_wiki_serve_does(
 
 def test_the_store_command_is_the_one_documented() -> None:
     """A smoke of the recipe itself: the store command exists and answers --help."""
-    command = _store_command("latent-wiki")
+    command = _store_command("kb-wiki")
     out = subprocess.run([*command, "serve", "--help"], capture_output=True, text=True)
     assert out.returncode == 0 and "--deployment" in out.stdout
 
