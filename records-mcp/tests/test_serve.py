@@ -321,3 +321,9 @@ async def test_http_rejects_a_missing_or_wrong_bearer() -> None:
     assert await _status(app, [(b"authorization", b"Bearer wrong")]) == 401
     assert await _status(app, [(b"authorization", b"Bearer s3cret")]) == 200
     assert await _status(app, [(b"authorization", b"bearer s3cret")]) == 200
+
+
+def test_an_equation_id_is_looked_up_in_its_table(store: Store) -> None:
+    """A part id names its table by its infix; an equation is one more kind."""
+    assert store.get("comb-ledger-a::equation::1") is None
+    assert "equations" in store._counts()

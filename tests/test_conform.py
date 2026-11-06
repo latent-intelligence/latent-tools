@@ -158,12 +158,14 @@ def records_deployment(tmp_path: Path) -> Path:
     return tmp_path / "brindlewick-hives"
 
 
+@pytest.mark.parametrize("given", ["--deployment", "--store"])
 async def test_records_mcp_answers_as_latent_records_serve_does(
-    records_deployment: Path,
+    given: str, records_deployment: Path
 ) -> None:
-    folder = str(records_deployment)
-    store = [*_store_command("latent-records"), "serve", "--deployment", folder]
-    tool = [sys.executable, "-m", "latent_records_mcp.cli", "--deployment", folder]
+    """Through a deployment's folder, and through the store's own."""
+    where = records_deployment / "store" if given == "--store" else records_deployment
+    store = [*_store_command("latent-records"), "serve", given, str(where)]
+    tool = [sys.executable, "-m", "latent_records_mcp.cli", given, str(where)]
     theirs = await _replies(store, RECORDS_CALLS)
     ours = await _replies(tool, RECORDS_CALLS)
     assert ours["name"] == theirs["name"] == "brindlewick-hives"

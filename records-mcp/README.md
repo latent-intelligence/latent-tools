@@ -10,7 +10,7 @@ object storage. It answers latent-records' `records-tools` contract: `describe`,
 uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
 ```
 
-Extras, as the store has them: `s3`, `gcs`, `az` for a deployment in a bucket; `text`
+Extras, as the store has them: `s3`, `gcs`, `az` for a deployment or a store in a bucket; `text`
 (sentence-transformers) and `clip` (open-clip) for the models a store's spaces name. A store
 whose space needs a model you did not install says so on the first search.
 
@@ -34,8 +34,8 @@ stamped `store.json` with a `store_id`, which names everything a server needs. G
 serve a store wherever it was copied, with or without the deployment that built it.
 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`. The server reads the
-declaration's `schema_version`, `name` and `output:` and serves `<output>/store`; a
-declaration written before 0.2.0 says `root:` for `output:`, and serves the same. A local
+declaration's `schema_version`, `name` and `output:` and serves `<output>/store`;
+an older declaration says `root:` for `output:`, and serves the same. A local
 declaration's output expands `$VAR` and then `~`, so a variable holding `~` resolves under
 home; a remote declaration's output is taken as written; one that needs this host's
 environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads nothing else,
@@ -54,7 +54,7 @@ their values; the client's environment must hold them.
 
 A space's model downloads on its first search. On a machine with no internet access, unpack
 the models beforehand (latent-records' `just models` fills a folder with exactly what a
-store's spaces load) and set two variables where the server starts:
+deployment's spaces load) and set two variables where the server starts:
 
 ```bash
 HF_HUB_CACHE=<the unpacked models folder>

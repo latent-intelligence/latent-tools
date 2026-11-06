@@ -16,8 +16,9 @@ The root is virtual and is never installed; a colleague installs one member from
 - **Same answers as the store's own `serve`,** held by `just conform` and by a byte-identity check of
   the copied files against the store's history when `LATENT_WIKI_SRC` or `LATENT_RECORDS_SRC`
   points at a checkout (its root or its `src/<package>`).
-- **Servers are read-only,** stdio first, HTTP behind a bearer token, a deployment folder (local or
-  any URI `UPath` opens) as the one argument. Libraries log; only `cli.py` prints.
+- **Servers are read-only,** stdio first, HTTP behind a bearer token, a deployment's folder (local
+  or any URI `UPath` opens) as the argument; records-mcp also takes a store's own folder, one or the
+  other. Libraries log; only `cli.py` prints.
 - **No client anywhere:** fixtures use invented names, a test greps `src/` for them, and nothing
   here names a deployment, a bucket or an engagement.
 
