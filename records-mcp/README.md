@@ -29,17 +29,28 @@ latent-records-mcp --deployment <folder>                 # or a deployment's sto
 claude mcp add records-brindlewick-hives -- latent-records-mcp --store <store> --warm
 ```
 
+What each takes:
+
+```
+--deployment brindlewick-hives/          --store <anywhere>/store/
+brindlewick-hives/                       store/
+  brindlewick-hives.yaml  name, output:    store.json          the stamp, with store_id
+  store/                  <output>/store   records.lance  chunks.lance  …
+    store.json  …                          <target>__<space>.lance
+                                           media/              figure images
+```
+
 `<store>` is a store's own folder, a local path or any URI fsspec opens; it must carry a
 stamped `store.json` with a `store_id`, which names everything a server needs. Give it to
 serve a store wherever it was copied, with or without the deployment that built it.
 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`. The server reads the
-declaration's `schema_version`, `name` and `output:` and serves `<output>/store`;
-an older declaration says `root:` for `output:`, and serves the same. A local
-declaration's output expands `$VAR` and then `~`, so a variable holding `~` resolves under
-home; a remote declaration's output is taken as written; one that needs this host's
-environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads nothing else,
-so it serves some declarations `latent-records serve` refuses, such as one without
+declaration's `schema_version`, `name` and `output:` and serves `<output>/store`; `output:`
+defaults to the folder itself. An older declaration says `root:` for `output:`, and serves
+the same. A local declaration's output expands `$VAR` and then `~`, so a variable holding
+`~` resolves under home; a remote declaration's output is taken as written; one that needs
+this host's environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads
+nothing else, so it serves some declarations `latent-records serve` refuses, such as one without
 `store_id`. `--warm` loads every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
