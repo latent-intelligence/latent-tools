@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 02340f3, below this header:
+# Verbatim copy of latent-records at e6981d2, below this header:
 #   src/latent_records/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -22,8 +22,9 @@ every request. HTTP without one is refused unless the operator passes
 **A refusal is one line,** the SDK's own argument checks included, and a scope that
 would match nothing (a record not in the store, an empty query) is refused rather than
 answered with nothing. With several spaces over a target, the client is told which to
-start with: the first by name that takes a text query, preferring one this install
-can load.
+start with: one that takes a text query, preferring one this install can load, then
+one made for the target's modality alone (a text model for text), then the first by
+name.
 """
 
 from __future__ import annotations
@@ -138,18 +139,25 @@ def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
 
 
 def recommended(spaces: Mapping[str, Any]) -> dict[str, str]:
-    """Per target, the space to start a search in: the first by name that takes a
-    text query, preferring one this install can load."""
+    """Per target, the space to start a search in: one that takes a text query,
+    preferring one this install can load, then one made for the target's modality
+    alone, so a text model before CLIP for text, then the first by name."""
     chosen: dict[str, str] = {}
-    for target in TARGETS:
+    for target, spec in TARGETS.items():
         text = [
             n
             for n in covering(spaces, target)
             if "text" in (spaces[n].get("query_modalities") or [])
         ]
         if text:
-            usable = [n for n in text if missing_install(spaces[n]) is None]
-            chosen[target] = (usable or text)[0]
+            chosen[target] = min(
+                text,
+                key=lambda n: (
+                    missing_install(spaces[n]) is not None,
+                    set(spaces[n].get("query_modalities") or []) != {spec.modality},
+                    n,
+                ),
+            )
     return chosen
 
 
@@ -482,8 +490,8 @@ def build_server(store: Store) -> Any:
 
     @server.tool(name="get", annotations=read_only)
     def get_tool(id: str) -> str:
-        """One row in full by id: a record, chunk, figure or table. A chunk also
-        names its previous and next chunk."""
+        """One row in full by id: a record, or a chunk, figure, table or equation. A
+        chunk also names its previous and next chunk."""
         bare = keys.read(id)
         row = guarded(lambda: get(store, bare, keys))
         if row is None:

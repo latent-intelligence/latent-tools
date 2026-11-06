@@ -1,6 +1,6 @@
 """The Store, read-only: the reader's view of a `latent-records.store` v1 store.
 
-Trimmed from latent-records' `store.py` (02340f3) to what a server needs: `Store.open`
+Trimmed from latent-records' `store.py` (e6981d2) to what a server needs: `Store.open`
 on a stamped `store.json`, the spaces it describes, status, search, contains and get.
 Nothing here plans, writes or locks; that is the store package's.
 """
@@ -148,10 +148,14 @@ class Store:
         return contains(self.backend, phrase, tables=tables, record_id=record_id)
 
     def get(self, item_id: str) -> dict[str, Any] | None:
-        """One row by id: a record id, or a chunk, figure or table id."""
+        """One row by id: a record id, or a part's id (``<record>::<infix>::<key>``)."""
         name = table_of(item_id)
         if name is None:
-            raise StoreError(f"{item_id!r} is not a record, chunk, figure or table id")
+            infixes = "|".join(t.infix for t in ITEM_TABLES.values() if t.infix)
+            raise StoreError(
+                f"{item_id!r} is not a record id or a part id "
+                f"(<record>::<{infixes}>::<key>)"
+            )
         key = ITEM_TABLES[name].key
         if name not in self.backend.table_names():
             return None

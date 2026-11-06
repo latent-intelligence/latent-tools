@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 02340f3, below this header:
+# Verbatim copy of latent-records at e6981d2, below this header:
 #   src/latent_records/backends/base.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 

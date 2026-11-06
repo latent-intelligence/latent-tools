@@ -1,4 +1,4 @@
-# Verbatim copy of latent-records at 02340f3, below this header:
+# Verbatim copy of latent-records at e6981d2, below this header:
 #   src/latent_records/search.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -236,6 +236,11 @@ def _vector(
 def _fts(
     backend: Backend, source: str, query: str, limit: int, record_id: str | None
 ) -> list[tuple[str, float]]:
+    """Full-text ranking of one table; none from a table the store was built
+    without, as `contains` reads it (a store older than its part kind)."""
+    if source not in backend.table_names():
+        return []
+
     def fetch(depth: int) -> list[tuple[str, float]]:
         rows = backend.text_search(
             source, query, column="text", limit=depth, where=_scope(record_id)
