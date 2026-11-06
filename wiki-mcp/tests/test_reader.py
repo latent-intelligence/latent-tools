@@ -64,7 +64,7 @@ def test_raw_refuses_an_unstamped_context(tmp_path: Path) -> None:
     _unstamp(context)
     reader = WikiReader(str(wiki), context=str(context))
     for key in ("tide-pool", "kelpmoor-ch01-pools"):
-        with pytest.raises(Refused, match="latent-wiki.context") as refused:
+        with pytest.raises(Refused, match=r"wiki\.context") as refused:
             reader.raw(key)
         assert "Count the limpets." not in str(refused.value)
 

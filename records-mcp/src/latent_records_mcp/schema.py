@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
-#   src/latent_records/schema.py
+# Verbatim copy of kb-store at fe6e28c, below this header:
+#   src/kb_store/schema.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The Arrow schemas of the store's tables — part of the published format.
@@ -12,6 +12,7 @@ out of its store still says what it is. Required columns are listed in
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 import pyarrow as pa
 
@@ -23,8 +24,8 @@ BBOX = pa.list_(pa.float32(), 4)
 
 def _stamp(extra: dict[str, str] | None = None) -> dict[bytes, bytes]:
     meta = {
-        "latent-records.format": STORE.name,
-        "latent-records.format_version": str(STORE.version),
+        "records.format": STORE.name,
+        "records.format_version": str(STORE.version),
         **(extra or {}),
     }
     return {k.encode(): v.encode() for k, v in meta.items()}
@@ -115,6 +116,32 @@ TABLES = pa.schema(
 )
 
 
+SETTINGS = pa.schema(
+    [
+        pa.field("key", pa.string(), nullable=False),
+        pa.field("value", pa.large_string(), nullable=False),
+    ],
+    metadata=_stamp(),
+)
+"""The store's own settings, one row keyed ``store``: what it was built with."""
+
+
+EQUATIONS = pa.schema(
+    [
+        pa.field("id", pa.string(), nullable=False),
+        pa.field("record_id", pa.string(), nullable=False),
+        pa.field("key", pa.string(), nullable=False),
+        pa.field("page", pa.int32()),
+        pa.field("bbox", BBOX),
+        pa.field("latex", pa.large_string(), nullable=False),
+        pa.field("display", pa.bool_()),
+        pa.field("text", pa.large_string(), nullable=False),
+        pa.field("content_sha256", pa.string(), nullable=False),
+    ],
+    metadata=_stamp(),
+)
+
+
 @dataclass(frozen=True)
 class ItemTable:
     """An item table: its schema, key, and the indexes a run keeps on it."""
@@ -122,6 +149,8 @@ class ItemTable:
     name: str
     schema: pa.Schema
     key: str
+    infix: str | None = None
+    """The word between a record id and a part's key in a part id: ``chunk``."""
     bitmap: tuple[str, ...] = ()
     label_list: tuple[str, ...] = ()
     fts: str | None = None
@@ -137,6 +166,7 @@ ITEM_TABLES: dict[str, ItemTable] = {
             "chunks",
             CHUNKS,
             "id",
+            infix="chunk",
             bitmap=("record_id",),
             label_list=("refs",),
             fts="text",
@@ -146,6 +176,7 @@ ITEM_TABLES: dict[str, ItemTable] = {
             "figures",
             FIGURES,
             "id",
+            infix="figure",
             bitmap=("record_id",),
             fts="text",
             media="media_path",
@@ -155,6 +186,16 @@ ITEM_TABLES: dict[str, ItemTable] = {
             "tables",
             TABLES,
             "id",
+            infix="table",
+            bitmap=("record_id",),
+            fts="text",
+            provenance=("record_id", "key", "page", "bbox"),
+        ),
+        ItemTable(
+            "equations",
+            EQUATIONS,
+            "id",
+            infix="equation",
             bitmap=("record_id",),
             fts="text",
             provenance=("record_id", "key", "page", "bbox"),
@@ -162,12 +203,57 @@ ITEM_TABLES: dict[str, ItemTable] = {
     )
 }
 
-TARGET_SOURCES: dict[str, tuple[str, str]] = {
-    "chunks": ("chunks", "text"),
-    "tables": ("tables", "text"),
-    "figure_captions": ("figures", "text"),
-    "figure_images": ("figures", "media_path"),
+
+@dataclass(frozen=True)
+class Target:
+    """What a space can embed: one column of one table, in one modality."""
+
+    name: str
+    modality: Literal["text", "image"]
+    table: str
+    column: str
+    hash_column: str
+    artifact: str
+    """The input artifact the target's rows come from."""
+
+
+TARGETS: dict[str, Target] = {
+    t.name: t
+    for t in (
+        Target("chunks", "text", "chunks", "text", "content_sha256", "text"),
+        Target("tables", "text", "tables", "text", "content_sha256", "tables"),
+        Target(
+            "figure_captions", "text", "figures", "text", "content_sha256", "figures"
+        ),
+        Target(
+            "figure_images", "image", "figures", "media_path", "media_sha256", "figures"
+        ),
+        Target("equations", "text", "equations", "text", "content_sha256", "equations"),
+    )
 }
+
+
+def table_of(item_id: str) -> str | None:
+    """The table an id names: ``records`` for a record id, a part's table for a part
+    id (``<record>::<infix>::<key>``), None for anything else."""
+    pieces = item_id.split("::")
+    if len(pieces) == 1:
+        return "records"
+    if len(pieces) == 3:
+        for name, table in ITEM_TABLES.items():
+            if table.infix == pieces[1]:
+                return name
+    return None
+
+
+def part_tables() -> tuple[str, ...]:
+    """Every table of a record's parts: all but ``records``, in declared order."""
+    return tuple(n for n, t in ITEM_TABLES.items() if t.infix)
+
+
+def presence_tables() -> tuple[str, ...]:
+    """The part tables an exact-phrase search reads: those with full text."""
+    return tuple(n for n in part_tables() if ITEM_TABLES[n].fts)
 
 
 def vector_schema(dims: int, meta: dict[str, str]) -> pa.Schema:

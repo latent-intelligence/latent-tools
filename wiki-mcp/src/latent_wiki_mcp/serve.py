@@ -1,17 +1,17 @@
-# Verbatim copy of latent-wiki at 068f0cb, below this header:
-#   src/latent_wiki/serve.py
+# Verbatim copy of kb-wiki at 7d13913, below this header:
+#   src/kb_wiki/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
-"""`latent-wiki serve` — one published wiki store over MCP, read-only, stdio or HTTP.
+"""`kb-wiki serve` — one published wiki store over MCP, read-only, stdio or HTTP.
 
 The adapter beside the store (house rule: stores own their capability). It adds no
 capability of its own: every tool is `WikiReader`'s, declared once in its tool table and
 dispatched by its `call`, and this module adapts that pair to MCP. The tool contract is
 `docs/contracts/wiki-tools.md`.
 
-Kept from the first `latent-wiki serve`, because use validated them:
+Kept from the first `kb-wiki serve`, because use validated them:
 
-- **Read-only by construction.** No tool writes. Authoring stays with `latent-wiki`,
+- **Read-only by construction.** No tool writes. Authoring stays with `kb-wiki`,
   where validate / links --close / index run.
 - **One server, one store.** The client chooses which servers to connect to, so keys
   from two stores never share a namespace.

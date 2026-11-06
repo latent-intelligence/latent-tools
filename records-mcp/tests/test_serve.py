@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
+from pathlib import Path
 from typing import Any
 
 import pytest
 from latent_records_mcp import serve
-from latent_records_mcp.errors import FormatError
+from latent_records_mcp.errors import FormatError, StoreError
 from latent_records_mcp.serve import DESCRIPTION_MAX, BearerCheck, build_server
 from latent_records_mcp.store import Store
 
@@ -321,3 +323,30 @@ async def test_http_rejects_a_missing_or_wrong_bearer() -> None:
     assert await _status(app, [(b"authorization", b"Bearer wrong")]) == 401
     assert await _status(app, [(b"authorization", b"Bearer s3cret")]) == 200
     assert await _status(app, [(b"authorization", b"bearer s3cret")]) == 200
+
+
+def test_an_equation_id_is_looked_up_in_its_table(store: Store) -> None:
+    """A part id names its table by its infix; an equation is one more kind, and a
+    refused id names every kind."""
+    assert store.get("comb-ledger-a::equation::1") is None
+    with pytest.raises(StoreError, match=r"chunk\|figure\|table\|equation"):
+        store.get("comb-ledger-a::eq::1")
+
+
+async def test_a_store_built_before_equations_is_searched_empty(
+    folder: Path,
+) -> None:
+    """A store older than a part kind has no table for it: a search finds nothing,
+    as `contains` does, and never names where the store is."""
+    from mcp import Client
+
+    stamp = folder / "store" / "store.json"
+    data = json.loads(stamp.read_text())
+    del data["tables"]["equations"]
+    stamp.write_text(json.dumps(data))
+    shutil.rmtree(folder / "store" / "equations.lance")
+    async with Client(build_server(Store.open(folder / "store"))) as client:
+        found = await _call(
+            client, "search", query="comb", target="equations", mode="fts"
+        )
+    assert found["hits"] == []

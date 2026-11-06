@@ -7,7 +7,7 @@ serves some declarations the store refuses; `deployment.py` says what it reads a
 refuses. Nothing but the protocol reaches stdout on stdio; diagnostics go
 through logging, to stderr.
 
-Adapted from latent-records' `cli/serve.py` (e9eb62a).
+Adapted from latent-records' `cli/serve.py` (fe6e28c).
 """
 
 from __future__ import annotations
@@ -27,11 +27,15 @@ from rich.markup import escape
 
 from . import __version__
 from . import serve as serving
-from .deployment import load_deployment_folder, root_variables
-from .errors import LatentRecordsError
-from .store import Store
+from .deployment import NAME, load_deployment_folder, require_filesystem, root_variables
+from .errors import KbStoreError
+from .store import Store, as_store_path
 
 TOKEN_ENV = "LATENT_RECORDS_SERVE_TOKEN"
+
+#: What a server started by its client needs to load models with no internet access:
+#: named in the client's `env` when set here, never their values.
+OFFLINE = ("HF_HUB_CACHE", "HF_HUB_OFFLINE")
 
 err_console = Console(stderr=True)
 
@@ -59,6 +63,12 @@ def main(
         help="A deployment's folder, holding <folder name>.yaml — a local path or any "
         "fsspec URI (s3://…): serves its store.",
     ),
+    store: str = typer.Option(
+        None,
+        "--store",
+        help="A store's folder, a local path or any fsspec URI, served alone: its "
+        "store.json names everything a server needs.",
+    ),
     warm: bool = typer.Option(
         False, "--warm", help="Load every space's model in the background."
     ),
@@ -83,20 +93,20 @@ def main(
         help="Print the version and exit.",
     ),
 ) -> None:
-    """Serve one deployment's store over MCP, read-only: describe, search, contains,
-    get, and each record as a resource.
+    """Serve one store over MCP, read-only: describe, search, contains, get, and each
+    record as a resource. Give a deployment's folder, or the store's own.
 
     One server, one store. HTTP needs a bearer token in $LATENT_RECORDS_SERVE_TOKEN.
     """
     logging.basicConfig(format="%(message)s")
     logging.getLogger("latent_records_mcp").setLevel(logging.INFO)
     if transport not in ("stdio", "http"):
-        fail(LatentRecordsError(f"--transport is stdio or http, not {transport!r}"))
-    if not deployment:
+        fail(KbStoreError(f"--transport is stdio or http, not {transport!r}"))
+    if bool(deployment) == bool(store):
         fail(
-            LatentRecordsError(
-                "give the deployment's folder: --deployment <folder>, a local path or "
-                "any fsspec URI (s3://…)"
+            KbStoreError(
+                "give the deployment's folder (--deployment <folder>) or the store's "
+                "(--store <folder>): one, a local path or any fsspec URI (s3://…)"
             )
         )
     token = os.environ.get(TOKEN_ENV) or None
@@ -105,19 +115,32 @@ def main(
     if transport == "http" and (
         problem := serving.refuse_http(token, TOKEN_ENV, host, insecure_local)
     ):
-        fail(LatentRecordsError(problem))
+        fail(KbStoreError(problem))
     try:
-        found = load_deployment_folder(deployment)
+        found = load_deployment_folder(deployment) if deployment else None
+        if store and NAME.match(store):
+            raise KbStoreError(
+                f"{store!r} is a name; give the store's folder, a path or a URI "
+                f"(./{store} if it is here)"
+            )
+        if store and "://" in store:
+            require_filesystem(store)
+        where = found.store_dir if found else as_store_path(store)
         try:
-            opened = Store.open(found.store_dir)
+            opened = Store.open(where)
         # A remote store fails in whatever its client raises.
         except Exception as exc:
-            fail(LatentRecordsError(str(exc) or type(exc).__name__))
+            fail(KbStoreError(str(exc) or type(exc).__name__))
         server = serving.build_server(opened)
-    except (LatentRecordsError, OSError, ImportError) as exc:
+    except (KbStoreError, OSError, ImportError) as exc:
         fail(exc)
     if print_config:
-        argv = [*_launcher(), "--deployment", str(found.path.parent)]
+        named = (
+            ["--deployment", _as_given(deployment, found.path.parent)]
+            if found
+            else ["--store", _as_given(store, where)]
+        )
+        argv = [*_launcher(), *named]
         if _in_uv_cache(argv[0]):
             err_console.print(
                 f"[yellow]warning[/] {escape(UV_CACHE_WARNING)}", soft_wrap=True
@@ -132,7 +155,10 @@ def main(
             port=port,
             token_env=TOKEN_ENV,
             token=token is not None,
-            variables=root_variables(found),
+            variables=[
+                *(root_variables(found) if found else []),
+                *(v for v in OFFLINE if os.environ.get(v)),
+            ],
         )
         typer.echo(json.dumps(block, indent=2))
         return
@@ -170,3 +196,9 @@ def _in_uv_cache(command: str) -> bool:
 
 if __name__ == "__main__":
     app()
+
+
+def _as_given(argument: str, resolved: object) -> str:
+    """A URI as the operator typed it, a path made absolute: a `UPath` prints a
+    Windows ``file:///C:/…`` with one slash fewer, which is another host's path."""
+    return argument if "://" in argument else str(resolved)

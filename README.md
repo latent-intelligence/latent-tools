@@ -8,8 +8,8 @@ Install only the tool you need.
 | [wiki-mcp](wiki-mcp/) | Read-only access to a published wiki, stored locally or in S3 |
 | [records-mcp](records-mcp/) | Read-only access to published records, stored locally or in object storage |
 
-These MCP servers are experimental. The existing `latent-wiki serve` and
-`latent-records serve` commands remain the recommended way to serve a store.
+These MCP servers are experimental. The existing `kb-wiki serve` and
+`kb-store serve` commands remain the recommended way to serve a store.
 
 ## Install
 
@@ -18,14 +18,14 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 **Wiki**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.3#subdirectory=wiki-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.4#subdirectory=wiki-mcp"
 latent-wiki-mcp --help
 ```
 
 **Records**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
 latent-records-mcp --help
 ```
 
@@ -37,11 +37,11 @@ the new release tag.
 Use `uvx` to run either tool without a separate install step:
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.3#subdirectory=wiki-mcp" latent-wiki-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.4#subdirectory=wiki-mcp" latent-wiki-mcp --help
 ```
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.1.2#subdirectory=records-mcp" latent-records-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp" latent-records-mcp --help
 ```
 
 `uvx` runs the tool from uv's cache, which `uv cache clean` or `uv cache prune` removes. So

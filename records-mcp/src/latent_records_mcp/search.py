@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
-#   src/latent_records/search.py
+# Verbatim copy of kb-store at fe6e28c, below this header:
+#   src/kb_store/search.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """Search one target: by vector, by full text, or both fused by rank.
@@ -16,20 +16,20 @@ searched the same way as one built here.
 
 from __future__ import annotations
 
+import json
 import re
 import unicodedata
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
 import numpy as np
 
 from .backends.base import Backend, Contains, Eq, Filter, In
-from .deployment import TARGETS
 from .embedders.base import ImageEmbedder, TextEmbedder, load_embedder
 from .embedders.windowed import embed_windowed
 from .errors import StoreError
-from .schema import TARGET_SOURCES
+from .schema import TARGETS, presence_tables
 
 Mode = Literal["vector", "fts", "hybrid"]
 MODES: tuple[str, ...] = ("vector", "fts", "hybrid")
@@ -61,14 +61,15 @@ class Hit:
     referenced_by: tuple[str, ...] = ()
     vector_rank: int | None = None
     fts_rank: int | None = None
+    citation: dict[str, Any] | None = None
+    """For a record read from a core store: the citation that resolves to its source,
+    the core store as its deployment named it, and the section a chunk came from."""
 
     @property
     def page_scope(self) -> str:
         """``chapter`` when the pages are the chunk's chapter range, else ``exact``."""
         return "chapter" if self.target == "chunks" else "exact"
 
-
-PRESENCE_TABLES: tuple[str, ...] = ("chunks", "figures", "tables")
 
 PRESENCE_IDS = 50
 
@@ -120,7 +121,7 @@ def contains(
     backend: Backend,
     phrase: str,
     *,
-    tables: Sequence[str] = PRESENCE_TABLES,
+    tables: Sequence[str] | None = None,
     record_id: str | None = None,
 ) -> Presence:
     """Rows whose text holds the phrase. The full-text index proposes candidates,
@@ -129,9 +130,11 @@ def contains(
     (a ligature, a soft hyphen): absence is therefore confirmed by a scan before it
     is reported."""
     pattern = phrase_pattern(phrase)
-    unknown = sorted(set(tables) - set(PRESENCE_TABLES))
+    known = presence_tables()
+    tables = known if tables is None else tables
+    unknown = sorted(set(tables) - set(known))
     if unknown:
-        raise StoreError(f"{unknown} are not among {list(PRESENCE_TABLES)}")
+        raise StoreError(f"{unknown} are not among {list(known)}")
     names = [n for n in tables if n in set(backend.table_names())]
     where = _scope(record_id)
     matched = [
@@ -165,25 +168,21 @@ def contains(
 
 
 def choose_space(spaces: dict[str, Any], target: str, space: str | None) -> str:
-    covering = sorted(
-        n for n, s in spaces.items() if target in (s.get("targets") or {})
-    )
+    covered = covering(spaces, target)
     if space is not None:
-        if space not in covering:
+        if space not in covered:
             raise StoreError(
                 f"space {space!r} has no vectors for {target}; "
-                f"spaces that do: {covering or 'none'}"
+                f"spaces that do: {covered or 'none'}"
             )
         return space
-    if len(covering) == 1:
-        return covering[0]
-    if not covering:
+    if len(covered) == 1:
+        return covered[0]
+    if not covered:
         raise StoreError(
             f"no space has vectors for {target}; search it with mode `fts`"
         )
-    raise StoreError(
-        f"several spaces cover {target}: {covering}; name one with `space`"
-    )
+    raise StoreError(f"several spaces cover {target}: {covered}; name one with `space`")
 
 
 def embed_query(entry: dict[str, Any], query: str | bytes) -> np.ndarray:
@@ -237,6 +236,11 @@ def _vector(
 def _fts(
     backend: Backend, source: str, query: str, limit: int, record_id: str | None
 ) -> list[tuple[str, float]]:
+    """Full-text ranking of one table; none from a table the store was built
+    without, as `contains` reads it (a store older than its part kind)."""
+    if source not in backend.table_names():
+        return []
+
     def fetch(depth: int) -> list[tuple[str, float]]:
         rows = backend.text_search(
             source, query, column="text", limit=depth, where=_scope(record_id)
@@ -286,12 +290,12 @@ def search(
         raise StoreError(f"mode {mode!r} is not one of {list(MODES)}")
     if limit < 1:
         raise StoreError("limit must be at least 1")
-    image_target = TARGETS[target][0] == "image"
+    image_target = TARGETS[target].modality == "image"
     if mode != "vector" and (image_target or isinstance(query, bytes)):
         raise StoreError(
             f"{mode} search needs text on both sides; use mode `vector` for images"
         )
-    source = TARGET_SOURCES[target][0]
+    source = TARGETS[target].table
 
     chosen: str | None = None
     vector: list[tuple[str, float]] = []
@@ -338,12 +342,15 @@ def _hits(
     ids = tuple(i for i, _ in ranking)
     rows = {r["id"]: r for r in backend.read(source, where=In("id", ids)).to_pylist()}
     record_ids = tuple(sorted({r["record_id"] for r in rows.values()}))
-    titles = {
-        r["record_id"]: r["title"]
+    records = {
+        r["record_id"]: r
         for r in backend.read(
-            "records", columns=["record_id", "title"], where=In("record_id", record_ids)
+            "records",
+            columns=["record_id", "title", "source_sha256", "extraction_json"],
+            where=In("record_id", record_ids),
         ).to_pylist()
     }
+    titles = {rid: r["title"] for rid, r in records.items()}
     cited: dict[str, list[str]] = {}
     if expand_refs and source != "chunks":
         for chunk in backend.read(
@@ -378,6 +385,39 @@ def _hits(
                 referenced_by=tuple(sorted(cited.get(item, ()))),
                 vector_rank=ranks[0].get(item),
                 fts_rank=ranks[1].get(item),
+                citation=_citation(records.get(row["record_id"]), row, source),
             )
         )
     return hits
+
+
+def _citation(
+    record: dict[str, Any] | None, row: dict[str, Any], source: str
+) -> dict[str, Any] | None:
+    """A core citation for a part of a record read from a core store; None otherwise.
+    A chunk names the section it was cut from; any part names its pages."""
+    if record is None:
+        return None
+    try:
+        account = json.loads(record.get("extraction_json") or "{}")
+    except ValueError:
+        return None
+    if not isinstance(account, dict) or account.get("format") != "contracts.core":
+        return None
+    first = row.get("page_start", row.get("page"))
+    last = row.get("page_end", row.get("page"))
+    citation: dict[str, Any] = {
+        "store": account.get("store"),
+        "doc_id": record["record_id"],
+        "sha256": record["source_sha256"],
+    }
+    if source == "chunks":
+        citation["section"] = row.get("chapter")
+    if first is not None:
+        citation["locator"] = {"pages": [first, last if last is not None else first]}
+    return citation
+
+
+def covering(spaces: Mapping[str, Any], target: str) -> list[str]:
+    """The spaces with vectors for a target, by name."""
+    return sorted(n for n, s in spaces.items() if target in (s.get("targets") or {}))

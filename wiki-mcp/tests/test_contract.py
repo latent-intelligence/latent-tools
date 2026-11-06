@@ -1,4 +1,4 @@
-"""The tools answer latent-wiki's `wiki-tools` contract: these names, these arguments,
+"""The tools answer kb-wiki's `wiki-tools` contract: these names, these arguments,
 in this order, and a refusal is one line with `isError` set, no footer and no path. The
 table here is the contract as this member knows it; a change in the copied reader that
 moves it fails here first."""

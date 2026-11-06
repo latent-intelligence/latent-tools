@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
-#   src/latent_records/formats.py
+# Verbatim copy of kb-store at fe6e28c, below this header:
+#   src/kb_store/formats.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """The formats this package publishes — names and versions, in one place.
@@ -33,4 +33,4 @@ class Format:
         return f"{data.get('format')!r} v{data.get('format_version')!r}"
 
 
-STORE = Format("latent-records.store", 1)
+STORE = Format("records.store", 1)

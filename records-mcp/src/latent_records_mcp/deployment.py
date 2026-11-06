@@ -1,29 +1,32 @@
 """The deployment folder a server is given, read for serving and for nothing else.
 
 A deployment is a folder holding `<folder name>.yaml`: a local path, or any URI fsspec
-opens, such as the copy a store's `just push` writes to a bucket. A server needs two
-things from the declaration: `schema_version`, which must be one it knows, and `root:`,
-where the products live, resolved against the folder wherever it is; the store is
-`<root>/store`, and its own `store.json` names its id. A `name:` that differs from the
-file's is refused, as the store does. Everything else in the declaration (inputs,
-chunking, spaces) is the authoring side's and is not read, so a declaration that grows a
-key still serves; the one typo it catches is a case-variant of `root`, which would
-otherwise serve the wrong folder in silence. A name is refused: looking one up is for
-the store's own authoring commands.
+opens, such as the copy `deployment sync` writes to a bucket. A server needs two things
+from the declaration: `schema_version`, which must be one it knows, and `output:`, where
+the products live, resolved against the folder wherever it is; the store is
+`<output>/store`, and its own `store.json` names its id. A declaration written before
+the store renamed it says `root:`, and is read the same; one naming both is refused. A
+`name:` that differs from the file's is refused, as the store does. Everything else in
+the declaration (inputs, chunking, spaces, mirror) is the authoring side's and is not
+read, so a declaration that grows a key still serves; the one typo it catches is a
+case-variant of `output` or `root`, which would otherwise serve the wrong folder in
+silence. A name is refused: looking one up is for the store's own authoring commands.
+To serve a store with no declaration, `--store` names its folder.
 
-A declaration read from another host is taken as written: a root with `~` or `$VAR` is
-refused rather than expanded with this host's environment, since no other host's values
-could be meant, and a value expanded here could carry this process's secrets into a
-request path.
+A declaration read from another host is taken as written: an output with `~` or `$VAR`
+is refused rather than expanded with this host's environment, since no other host's
+values could be meant, and a value expanded here could carry this process's secrets into
+a request path.
 
-Adapted from latent-records' `deployment.py` (e9eb62a), plus the constants the copied
-`search`, `store_json` and `embedders` modules import. It reads fewer keys and so
-refuses less: it serves a declaration the store refuses for lacking `store_id` or
-inputs, or for a key the store does not know. It refuses a name, a folder without a
+Adapted from latent-records' `deployment.py` (fe6e28c), plus the constants the copied
+`store_json` and `embedders` modules import. It reads fewer keys and so refuses less: it
+serves a declaration the store refuses for lacking `store_id` or inputs, for a key the
+store does not know, or for saying `root:`. It refuses a name, a folder without a
 declaration, a `schema_version` it does not know, a `name:` that differs from the
-folder's, a case-variant of `root`, a remote root that needs this host's environment or
-disk, a local root naming an unset variable, and a URI scheme this install cannot open,
-some of these in other words than the store's.
+folder's, a case-variant of `output` or `root`, an output that needs this host's
+environment or disk when the declaration is remote, a local output naming an unset
+variable, and a URI scheme this install cannot open, some of these in other words than
+the store's.
 """
 
 from __future__ import annotations
@@ -32,13 +35,13 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 import fsspec  # type: ignore[import-untyped]
 import yaml
 from upath import UPath
 
 from .errors import DeploymentError
+from .locations import location
 
 #: The extra that installs a scheme's filesystem, for the schemes this package is
 #: checked against. Any other scheme fsspec knows works once its filesystem is in.
@@ -56,13 +59,6 @@ EXTRAS = {
 LOCAL_SCHEMES = {"file", "local"}
 
 SCHEMA_VERSION = 1
-
-TARGETS: dict[str, tuple[str, str]] = {
-    "chunks": ("text", "text"),
-    "tables": ("text", "tables"),
-    "figure_captions": ("text", "figures"),
-    "figure_images": ("image", "figures"),
-}
 
 
 @dataclass(frozen=True)
@@ -97,13 +93,13 @@ NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 @dataclass(frozen=True)
 class Deployment:
     name: str
-    path: Path
-    root: Path
+    path: UPath
+    root: UPath
     declared_root: str = "."
-    """``root:`` as written, before its variables were expanded."""
+    """``output:`` as written, before its variables were expanded."""
 
     @property
-    def store_dir(self) -> Path:
+    def store_dir(self) -> UPath:
         return self.root / "store"
 
     @property
@@ -115,7 +111,7 @@ def _looks_local(value: str) -> bool:
     """Whether a declared location can only mean the writing host's own disk."""
     if "://" in value:
         return _scheme(value) in LOCAL_SCHEMES
-    return Path(value).is_absolute()
+    return Path(value).is_absolute() or value.startswith(("/", "\\"))
 
 
 def _names_environment(value: str) -> bool:
@@ -123,7 +119,7 @@ def _names_environment(value: str) -> bool:
     return "://" not in value and (value.startswith("~") or "$" in value)
 
 
-def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
+def resolve_location(value: str, base: UPath, *, expand: bool = True) -> UPath:
     """A path from the declaration: a URI as given, anything else against the file."""
     expanded = _expand(value) if expand else value
     if expand and "$" in expanded:
@@ -131,7 +127,7 @@ def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
     if "://" in expanded:
         return _upath(expanded)
     path = Path(expanded)
-    return (path if path.is_absolute() else base / path).resolve()
+    return location(path if path.is_absolute() else base / path).resolve()
 
 
 #: A variable as `os.path.expandvars` reads one: ``$NAME`` or ``${NAME}``.
@@ -139,8 +135,8 @@ VARIABLE = re.compile(r"\$(\w+|\{[^}]*\})")
 
 
 def root_variables(deployment: Deployment) -> list[str]:
-    """The variables the declaration's ``root:`` names, once each: what a process
-    started with another environment needs to find the same root."""
+    """The variables the declaration's ``output:`` names, once each: what a process
+    started with another environment needs to find the same output."""
     names = (n.strip("{}") for n in VARIABLE.findall(deployment.declared_root))
     return list(dict.fromkeys(names))
 
@@ -150,9 +146,9 @@ def _expand(value: str) -> str:
     return os.path.expanduser(os.path.expandvars(value))
 
 
-def _upath(uri: str) -> Path:
+def _upath(uri: str) -> UPath:
     try:
-        return cast(Path, UPath(uri))
+        return location(uri)
     except ValueError as exc:
         raise DeploymentError(
             f"{uri!r}: {_scheme(uri)}:// is not a scheme fsspec knows"
@@ -162,8 +158,8 @@ def _upath(uri: str) -> Path:
 def load_deployment_folder(folder: str) -> Deployment:
     """Load the deployment whose folder is `folder`, for serving its ``store_dir``.
 
-    A declaration read from another host may not put ``root:`` on this host's disk: no
-    other host could follow it.
+    A declaration read from another host may not put ``output:`` on this host's disk:
+    no other host could follow it.
     """
     if NAME.match(folder):
         raise DeploymentError(
@@ -174,7 +170,7 @@ def load_deployment_folder(folder: str) -> Deployment:
         require_filesystem(folder)
         directory = _upath(folder)
     else:
-        directory = Path(folder).expanduser().resolve()
+        directory = location(folder)
     if not directory.name:
         raise DeploymentError(
             f"{folder!r} has no name to find its declaration by; give the "
@@ -186,6 +182,10 @@ def load_deployment_folder(folder: str) -> Deployment:
         # credentials or a refused request, which would read as no declaration.
         text = source.read_text(encoding="utf-8")
     except FileNotFoundError as exc:
+        if "://" not in folder and directory.is_file():
+            raise DeploymentError(
+                f"{directory} is a file; give the folder that holds it"
+            ) from exc
         raise DeploymentError(f"no deployment declaration at {source}") from exc
     except NotADirectoryError as exc:
         raise DeploymentError(
@@ -237,8 +237,8 @@ def _yaml_problem(exc: yaml.YAMLError) -> str:
     return text[0] if text else type(exc).__name__
 
 
-def _parse(text: str, source: Path) -> Deployment:
-    """A declaration's text, read from `source`: its version, name and root."""
+def _parse(text: str, source: UPath) -> Deployment:
+    """A declaration's text, read from `source`: its version, name and output."""
     try:
         raw = yaml.safe_load(text)
     except yaml.YAMLError as exc:
@@ -264,20 +264,27 @@ def _parse(text: str, source: Path) -> Deployment:
             f"{source}: name {name!r} must be lowercase letters, digits and hyphens"
         )
     for key in raw:
-        if str(key).lower() == "root" and key != "root":
-            raise DeploymentError(f"{source}: {key!r} is not a key; did you mean root?")
+        lowered = str(key).lower()
+        if lowered in ("output", "root") and key != lowered:
+            raise DeploymentError(
+                f"{source}: {key!r} is not a key; did you mean output?"
+            )
+    if "output" in raw and "root" in raw:
+        raise DeploymentError(
+            f"{source}: output and root name one thing; keep output, root's newer name"
+        )
     base = source.parent
-    declared = str(raw.get("root") or ".")
+    declared = str(raw.get("output") or raw.get("root") or ".")
     remote = not _on_this_host(str(source))
     if remote and _names_environment(declared):
         raise DeploymentError(
-            f"{source}: root {declared!r} names this host's environment; a remote "
-            f"deployment's root is taken as written, relative to its folder or a URI"
+            f"{source}: output {declared!r} names this host's environment; a remote "
+            f"deployment's output is taken as written, relative to its folder or a URI"
         )
     if remote and _looks_local(declared):
         raise DeploymentError(
-            f"{source}: root {declared!r} is a local path; a remote deployment's "
-            f"root is relative to its folder, or a remote URI"
+            f"{source}: output {declared!r} is a local path; a remote deployment's "
+            f"output is relative to its folder, or a remote URI"
         )
     return Deployment(
         name=name,

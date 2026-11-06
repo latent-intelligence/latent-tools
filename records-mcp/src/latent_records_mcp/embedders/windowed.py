@@ -1,5 +1,5 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
-#   src/latent_records/embedders/windowed.py
+# Verbatim copy of kb-store at fe6e28c, below this header:
+#   src/kb_store/embedders/windowed.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """Embed long text through a model with a short context: slide, embed, average.

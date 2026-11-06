@@ -1,13 +1,13 @@
 """Rebuild the fixture store under tests/fixtures/deployments/brindlewick-hives/.
 
-The store is built by latent-records itself, from its own fixture deployment and
-doc-intelligence input, with the `hash` test embedder, so no model is downloaded. Run it
-inside a latent-records checkout's environment, naming this member's directory:
+The store is built by kb-store itself, from its own fixture deployment and
+kb-docs input, with the `hash` test embedder, so no model is downloaded. Run it
+inside a kb-store checkout's environment, naming this member's directory:
 
-    uv run --directory <latent-records checkout> python <this file> <records-mcp dir>
+    uv run --directory <kb-store checkout> python <this file> <records-mcp dir>
 
 Give both paths absolute: `--directory` runs from inside the checkout. It replaces the
-fixture's `store/` and its declaration, and prints the latent-records commit the store
+fixture's `store/` and its declaration, and prints the kb-store commit the store
 was built by (marked dirty when the checkout had changes), for the CHANGELOG.
 """
 
@@ -23,9 +23,9 @@ NAME = "brindlewick-hives"
 
 
 def main(member: Path) -> int:
-    from latent_records.store import Store
+    from kb_store.store import Store
 
-    checkout = Path(sys.modules["latent_records"].__file__ or "").resolve().parents[2]
+    checkout = Path(sys.modules["kb_store"].__file__ or "").resolve().parents[2]
     sys.path.insert(0, str(checkout / "tests"))
     from conftest import copy_fixture_deployment  # noqa: E402
 
@@ -43,7 +43,7 @@ def main(member: Path) -> int:
         ["git", "-C", str(checkout), "describe", "--always", "--dirty"],
         capture_output=True, text=True, check=True,
     ).stdout.strip()  # fmt: skip
-    print(f"wrote {target} from latent-records {commit}")
+    print(f"wrote {target} from kb-store {commit}")
     return 0
 
 

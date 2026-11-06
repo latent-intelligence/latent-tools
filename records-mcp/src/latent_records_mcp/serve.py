@@ -1,11 +1,11 @@
-# Verbatim copy of latent-records at e9eb62a, below this header:
-#   src/latent_records/serve.py
+# Verbatim copy of kb-store at fe6e28c, below this header:
+#   src/kb_store/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
 """A store over MCP: search, an exact check, a row by id, and what is there.
 
 Thin over `Store`, read-only, and one ranking per call, as everywhere else. The
-server is built here and run by `latent-records serve`; ``mcp`` is the ``serve``
+server is built here and run by `kb-store serve`; ``mcp`` is the ``serve``
 extra and is imported only when a server is built. Nothing but the protocol may
 reach stdout, so diagnostics go through logging (stderr). The tool contract is
 `docs/contracts/records-tools.md`.
@@ -22,8 +22,9 @@ every request. HTTP without one is refused unless the operator passes
 **A refusal is one line,** the SDK's own argument checks included, and a scope that
 would match nothing (a record not in the store, an empty query) is refused rather than
 answered with nothing. With several spaces over a target, the client is told which to
-start with: the first by name that takes a text query, preferring one this install
-can load.
+start with: one that takes a text query, preferring one this install can load, then
+one made for the target's modality alone (a text model for text), then the first by
+name.
 """
 
 from __future__ import annotations
@@ -39,10 +40,10 @@ from typing import Any, cast
 
 from . import __version__
 from .backends.base import Eq
-from .deployment import TARGETS
 from .embedders.base import load_embedder, missing_install
 from .errors import FormatError
-from .search import MODES, PRESENCE_TABLES, Hit, Mode
+from .schema import TARGETS, presence_tables
+from .search import MODES, Hit, Mode, covering
 from .store import Store
 
 log = logging.getLogger(__name__)
@@ -133,27 +134,30 @@ def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
         "media_path": hit.media_path,
         "refs": keys.names(hit.refs),
         "referenced_by": keys.names(hit.referenced_by),
+        **({"citation": hit.citation} if hit.citation else {}),
     }
 
 
-def covering(spaces: Mapping[str, Any], target: str) -> list[str]:
-    """The spaces with vectors for a target, by name."""
-    return sorted(n for n, s in spaces.items() if target in (s.get("targets") or {}))
-
-
 def recommended(spaces: Mapping[str, Any]) -> dict[str, str]:
-    """Per target, the space to start a search in: the first by name that takes a
-    text query, preferring one this install can load."""
+    """Per target, the space to start a search in: one that takes a text query,
+    preferring one this install can load, then one made for the target's modality
+    alone, so a text model before CLIP for text, then the first by name."""
     chosen: dict[str, str] = {}
-    for target in TARGETS:
+    for target, spec in TARGETS.items():
         text = [
             n
             for n in covering(spaces, target)
             if "text" in (spaces[n].get("query_modalities") or [])
         ]
         if text:
-            usable = [n for n in text if missing_install(spaces[n]) is None]
-            chosen[target] = (usable or text)[0]
+            chosen[target] = min(
+                text,
+                key=lambda n: (
+                    missing_install(spaces[n]) is not None,
+                    set(spaces[n].get("query_modalities") or []) != {spec.modality},
+                    n,
+                ),
+            )
     return chosen
 
 
@@ -178,7 +182,7 @@ def describe(store: Store) -> dict[str, Any]:
         "spaces": spaces,
         "recommended": recommended(store.spaces),
         "modes": list(MODES),
-        "contains_tables": list(PRESENCE_TABLES),
+        "contains_tables": list(presence_tables()),
     }
 
 
@@ -329,7 +333,7 @@ def build_server(store: Store) -> Any:
     store_id = store_id_of(store)
     keys = Keys(store_id)
     records, total = listing(store)
-    instructions = f"{store.title or 'A latent-records store'}.\n" + (
+    instructions = f"{store.title or 'A kb-store store'}.\n" + (
         INSTRUCTIONS.format(store_id=store_id)
     )
     instructions += guidance(store)
@@ -376,7 +380,7 @@ def build_server(store: Store) -> Any:
                 mime_type="text/markdown",
             )
         )
-    # Open-world, as `latent-wiki serve` declares: a store may sit on object storage, so
+    # Open-world, as `kb-wiki serve` declares: a store may sit on object storage, so
     # a read can leave the machine.
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 
@@ -421,9 +425,10 @@ def build_server(store: Store) -> Any:
         record_id: str | None = None,
         expand_refs: bool = False,
     ) -> str:
-        """Rank one target (chunks, tables, figure_captions, figure_images) in one
-        space by vector, fts or hybrid, 1 to 50 hits. Name a space when several cover
-        the target (see describe); figure_images take mode "vector" only."""
+        """Rank one target (chunks, tables, figure_captions, equations,
+        figure_images) in one space by vector, fts or hybrid, 1 to 50 hits. Name a
+        space when several cover the target (see describe); figure_images take mode
+        "vector" only."""
         if mode not in MODES:
             raise ToolError(f"mode must be one of {list(MODES)}")
         if not 1 <= limit <= MAX_LIMIT:
@@ -431,7 +436,7 @@ def build_server(store: Store) -> Any:
         if not query.strip():
             raise ToolError("give a query: words to rank by")
         # Images take vector search only; search says so before choosing a space.
-        image = target in TARGETS and TARGETS[target][0] == "image"
+        image = target in TARGETS and TARGETS[target].modality == "image"
         if not space and (mode == "vector" or (mode == "hybrid" and not image)):
             several = covering(store.spaces, target)
             if len(several) > 1:
@@ -471,9 +476,7 @@ def build_server(store: Store) -> Any:
         where. total 0 means it does not occur."""
         within = scope(record_id)
         found = guarded(
-            lambda: store.contains(
-                phrase, tables=tables or PRESENCE_TABLES, record_id=within
-            )
+            lambda: store.contains(phrase, tables=tables or None, record_id=within)
         )
         return json.dumps(
             {
@@ -487,8 +490,8 @@ def build_server(store: Store) -> Any:
 
     @server.tool(name="get", annotations=read_only)
     def get_tool(id: str) -> str:
-        """One row in full by id: a record, chunk, figure or table. A chunk also
-        names its previous and next chunk."""
+        """One row in full by id: a record, or a chunk, figure, table or equation. A
+        chunk also names its previous and next chunk."""
         bare = keys.read(id)
         row = guarded(lambda: get(store, bare, keys))
         if row is None:

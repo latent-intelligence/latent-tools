@@ -1,10 +1,10 @@
 """The copied files are the store's, byte for byte, below their three-line header, at
 the commit the header names.
 
-Runs where `LATENT_WIKI_SRC` names a latent-wiki checkout, or its `src/latent_wiki`;
-skipped elsewhere. This is how drift is seen on the machine that syncs the copy: the
-header's commit is read from that checkout's history, so a stale header fails even when
-the working tree happens to match.
+Runs where `KB_WIKI_SRC` names a kb-wiki checkout, or its `src/kb_wiki`; skipped
+elsewhere. This is how drift is seen on the machine that syncs the copy: the header's
+commit is read from that checkout's history, so a stale header fails even when the
+working tree happens to match.
 """
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ HEADER_LINES = 4  # three comment lines and a blank one
 
 @pytest.fixture
 def source() -> Path:
-    where = os.environ.get("LATENT_WIKI_SRC")
+    where = os.environ.get("KB_WIKI_SRC")
     if not where:
-        pytest.skip("LATENT_WIKI_SRC is not set")
+        pytest.skip("KB_WIKI_SRC is not set")
     path = Path(where)
-    return path / "src" / "latent_wiki" if (path / "src").is_dir() else path
+    return path / "src" / "kb_wiki" if (path / "src").is_dir() else path
 
 
 def _at_commit(source: Path, commit: str, path: str) -> str:
@@ -42,7 +42,7 @@ def _at_commit(source: Path, commit: str, path: str) -> str:
 @pytest.mark.parametrize("name", VERBATIM)
 def test_copy_is_byte_identical_below_its_header(source: Path, name: str) -> None:
     copied = (HERE / name).read_text().split("\n", HEADER_LINES)
-    assert copied[0].startswith("# Verbatim copy of latent-wiki at ")
+    assert copied[0].startswith("# Verbatim copy of kb-wiki at ")
     commit = copied[0].split(" at ")[1].split(",")[0]
     path = copied[1].removeprefix("#   ")
     assert path.endswith(f"/{name}")
