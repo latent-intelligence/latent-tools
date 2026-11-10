@@ -221,7 +221,10 @@ def resolve_location(
                 f"{value!r}: {_scheme(expanded)}:// is not a scheme fsspec knows"
             ) from exc
     path = Path(expanded)
-    return (path if path.is_absolute() else base / path).resolve()
+    if path.is_absolute():
+        return path.resolve()
+    # Joined with `/`, never as a Windows Path, which would put `\` into a URI folder.
+    return (base / expanded.replace("\\", "/")).resolve()
 
 
 def _yaml_problem(exc: yaml.YAMLError) -> str:
