@@ -507,3 +507,67 @@ def test_a_local_output_takes_its_vars_unless_the_environment_sets_it(
         load_deployment_folder(str(deployment)).wiki_dir
         == (tmp_path / "b").resolve() / "wiki"
     )
+
+
+def test_a_tilde_in_a_variable_is_home_and_an_unset_one_is_refused(
+    deployment: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_wiki_mcp.deployment import load_deployment_folder
+
+    home = tmp_path / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("DATA", raising=False)
+    _declare(
+        str(deployment),
+        "schema_version: 1\nvars:\n  DATA: ~/d\noutput: ${DATA}/o\nwiki: {config: wiki.yaml}\n",
+    )
+    assert (
+        load_deployment_folder(str(deployment)).wiki_dir
+        == (home / "d" / "o").resolve() / "wiki"
+    )
+    _declare(
+        str(deployment),
+        "schema_version: 1\noutput: ${DATA}/o\nwiki: {config: wiki.yaml}\n",
+    )
+    _one_line_refusal(_run("--deployment", str(deployment)), "DATA is not set")
+
+
+def test_a_local_output_reads_the_nearest_env_and_skips_an_empty_value(
+    deployment: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_wiki_mcp.deployment import load_deployment_folder
+
+    monkeypatch.setenv("DATA", "")
+    (deployment.parent / ".env").write_text(f"DATA={tmp_path / 'from-env'}\n")
+    _declare(
+        str(deployment),
+        f"schema_version: 1\nvars:\n  DATA: {tmp_path / 'a'}\noutput: ${{DATA}}\n"
+        "wiki: {config: wiki.yaml}\n",
+    )
+    found = load_deployment_folder(str(deployment))
+    assert found.wiki_dir == (tmp_path / "from-env").resolve() / "wiki"
+    (deployment.parent / ".env").write_text("DATA=x-$HOME\n")
+    _one_line_refusal(_run("--deployment", str(deployment)), "may not use a variable")
+
+
+@pytest.mark.parametrize(
+    "value", ["~/stores", "/srv/stores", "file:///srv/stores", "../.."]
+)
+def test_a_remote_vars_value_is_held_to_the_remote_rules(
+    value: str, pushed: str
+) -> None:
+    _declare(
+        pushed,
+        f"schema_version: 1\nvars:\n  DATA: '{value}'\noutput: ${{DATA}}/y\n"
+        "wiki: {config: wiki.yaml}\n",
+    )
+    result = _run("--deployment", pushed)
+    assert result.exit_code != 0, result.output
+
+
+def test_a_variable_that_climbs_out_is_refused_locally(deployment: Path) -> None:
+    _declare(
+        str(deployment),
+        "schema_version: 1\nvars:\n  DATA: ../..\noutput: ${DATA}/y\nwiki: {config: wiki.yaml}\n",
+    )
+    _one_line_refusal(_run("--deployment", str(deployment)), "climbs out")

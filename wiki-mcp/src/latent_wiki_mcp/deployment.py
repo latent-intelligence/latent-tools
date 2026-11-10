@@ -175,6 +175,22 @@ def _substitute(value: str, known: Mapping[str, str]) -> str:
     return VARIABLE.sub(lambda m: known.get(m.group(1).strip("{}"), m.group(0)), value)
 
 
+def _refuse_climb(written: str, value: str, where: str) -> None:
+    """Refuse a short location a variable made climb out with `..`: the value is put
+    in place first, then read as if written that way, as the store does."""
+    short = not (
+        value.startswith(("/", "\\", "~", "$"))
+        or "://" in value
+        or re.match(r"^[A-Za-z]:", value)
+    )
+    if "$" in written and short and ".." in value.replace("\\", "/").split("/"):
+        raise DeploymentError(
+            f"{where}: {value!r}, its variable read, climbs out of the deployment's "
+            "folder; write the location in full",
+            reason="parent-segment",
+        )
+
+
 def resolve_location(
     value: str,
     base: Path,
@@ -188,7 +204,15 @@ def resolve_location(
     known = {k: v for k, v in os.environ.items() if v and k not in _WORKING} | dict(
         values or {}
     )
-    expanded = _substitute(os.path.expanduser(value), known) if expand else value
+    expanded = os.path.expanduser(_substitute(value, known)) if expand else value
+    if expand and "$" in expanded:
+        unset = ", ".join(n.strip("{}") for n in VARIABLE.findall(expanded))
+        raise DeploymentError(
+            f"{value!r}: {unset} is not set; set it in the environment, a .env beside "
+            "the declaration or above it, or under vars:",
+            reason="variable-missing",
+        )
+    _refuse_climb(value, expanded, value)
     if "://" in expanded:
         try:
             return as_path(UPath(expanded))
@@ -266,7 +290,8 @@ def _parse(text: str, source: Path) -> Deployment:
     values = {v.name: v.value for v in found_vars}
     if remote:
         # What the declaration's own `vars:` sets is written in it; nothing else is.
-        declared = _substitute(declared, values)
+        written, declared = declared, _substitute(declared, values)
+        _refuse_climb(written, declared, f"{source}: output")
     if remote and _names_environment(declared):
         raise DeploymentError(
             f"{source}: output {declared!r} names this host's environment; a remote "

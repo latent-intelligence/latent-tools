@@ -543,3 +543,40 @@ def test_a_local_root_takes_its_vars_unless_the_environment_sets_it(
     found = load_deployment_folder(str(folder))
     assert found.store_dir == (tmp_path / "b").resolve() / "store"
     assert root_variables(found) == ["DATA"]
+
+
+def test_a_local_root_reads_the_nearest_env_and_skips_an_empty_value(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_records_mcp.deployment import load_deployment_folder
+
+    monkeypatch.setenv("DATA", "")
+    (folder.parent / ".env").write_text(f"DATA={tmp_path / 'from-env'}\n")
+    _declare(
+        str(folder),
+        f"schema_version: 1\nvars:\n  DATA: {tmp_path / 'a'}\noutput: ${{DATA}}\n",
+    )
+    found = load_deployment_folder(str(folder))
+    assert found.store_dir == (tmp_path / "from-env").resolve() / "store"
+    (folder.parent / ".env").write_text("DATA=x-$HOME\n")
+    _one_line_refusal(_run("--deployment", str(folder)), "may not use a variable")
+
+
+@pytest.mark.parametrize(
+    "value", ["~/stores", "/srv/stores", "file:///srv/stores", "../.."]
+)
+def test_a_remote_vars_value_is_held_to_the_remote_rules(
+    value: str, pushed: str
+) -> None:
+    _declare(
+        pushed, f"schema_version: 1\nvars:\n  DATA: '{value}'\noutput: ${{DATA}}/y\n"
+    )
+    result = _run("--deployment", pushed)
+    assert result.exit_code != 0, result.output
+
+
+def test_a_variable_that_climbs_out_is_refused_locally(folder: Path) -> None:
+    _declare(
+        str(folder), "schema_version: 1\nvars:\n  DATA: ../..\noutput: ${DATA}/y\n"
+    )
+    _one_line_refusal(_run("--deployment", str(folder)), "climbs out")

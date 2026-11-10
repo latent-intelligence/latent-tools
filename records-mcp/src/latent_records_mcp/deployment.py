@@ -126,6 +126,22 @@ def _names_environment(value: str) -> bool:
     return "://" not in value and (value.startswith("~") or "$" in value)
 
 
+def _refuse_climb(written: str, value: str, where: str) -> None:
+    """Refuse a short location a variable made climb out with `..`: the value is put
+    in place first, then read as if written that way, as the store does."""
+    short = not (
+        value.startswith(("/", "\\", "~", "$"))
+        or "://" in value
+        or re.match(r"^[A-Za-z]:", value)
+    )
+    if "$" in written and short and ".." in value.replace("\\", "/").split("/"):
+        raise DeploymentError(
+            f"{where}: {value!r}, its variable read, climbs out of the deployment's "
+            "folder; write the location in full",
+            reason="parent-segment",
+        )
+
+
 def resolve_location(
     value: str,
     base: UPath,
@@ -136,6 +152,8 @@ def resolve_location(
     """A path from the declaration: a URI as given, anything else against the file.
     A variable is read from ``values`` (the deployment's), else the environment."""
     expanded = _expand(value, values) if expand else value
+    if expand:
+        _refuse_climb(value, expanded, value)
     if expand and "$" in expanded:
         raise DeploymentError(f"{value!r} names an environment variable that is unset")
     if "://" in expanded:
@@ -308,9 +326,11 @@ def _parse(text: str, source: UPath) -> Deployment:
     values = {v.name: v.value for v in found_vars}
     if remote:
         # What the declaration's own `vars:` sets is written in it; nothing else is.
+        written = declared
         declared = VARIABLE.sub(
             lambda m: values.get(m.group(1).strip("{}"), m.group(0)), declared
         )
+        _refuse_climb(written, declared, f"{source}: output")
     if remote and _names_environment(declared):
         raise DeploymentError(
             f"{source}: output {declared!r} names this host's environment; a remote "
