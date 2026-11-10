@@ -1544,6 +1544,7 @@ dependencies = [
     { name = "pyyaml" },
     { name = "rich" },
     { name = "typer" },
+    { name = "typing-extensions" },
     { name = "universal-pathlib" },
     { name = "uvicorn" },
 ]
@@ -1583,6 +1584,7 @@ requires-dist = [
     { name = "s3fs", marker = "extra == 's3'", specifier = ">=2024.0" },
     { name = "sentence-transformers", marker = "extra == 'text'", specifier = ">=3.0" },
     { name = "typer", specifier = ">=0.16" },
+    { name = "typing-extensions", specifier = ">=4.6" },
     { name = "universal-pathlib", specifier = ">=0.2" },
     { name = "uvicorn", specifier = ">=0.30" },
 ]
