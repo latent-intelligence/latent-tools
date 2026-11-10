@@ -16,7 +16,14 @@ from pathlib import Path
 import pytest
 
 HERE = Path(__file__).resolve().parents[1] / "src" / "latent_wiki_mcp"
-VERBATIM = ("reader.py", "_fts.py", "views.py", "formats.py", "serve.py")
+VERBATIM = (
+    "reader.py",
+    "_fts.py",
+    "views.py",
+    "formats.py",
+    "serve.py",
+    "variables.py",
+)
 HEADER_LINES = 4  # three comment lines and a blank one
 
 

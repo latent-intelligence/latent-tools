@@ -22,6 +22,7 @@ VERBATIM = (
     "store_json.py",
     "locations.py",
     "errors.py",
+    "variables.py",
     "backends/base.py",
     "backends/lance.py",
     "embedders/base.py",

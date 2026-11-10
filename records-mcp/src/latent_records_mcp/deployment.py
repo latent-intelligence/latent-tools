@@ -16,7 +16,10 @@ To serve a store with no declaration, `--store` names its folder.
 A declaration read from another host is taken as written: an output with `~` or `$VAR`
 is refused rather than expanded with this host's environment, since no other host's
 values could be meant, and a value expanded here could carry this process's secrets into
-a request path.
+a request path. A variable the declaration's own `vars:` sets is part of what is
+written, and is read. On this host, a variable's value is the environment's, else the
+nearest `.env` beside or above the declaration, else its `vars:` (the store's
+`variables.py`).
 
 Adapted from latent-records' `deployment.py` (fe6e28c), plus the constants the copied
 `store_json` and `embedders` modules import. It reads fewer keys and so refuses less: it
@@ -33,6 +36,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -42,6 +46,7 @@ from upath import UPath
 
 from .errors import DeploymentError
 from .locations import location
+from .variables import _WORKING, Variable, declared_vars, variables
 
 #: The extra that installs a scheme's filesystem, for the schemes this package is
 #: checked against. Any other scheme fsspec knows works once its filesystem is in.
@@ -97,6 +102,8 @@ class Deployment:
     root: UPath
     declared_root: str = "."
     """``output:`` as written, before its variables were expanded."""
+    variables: tuple[Variable, ...] = ()
+    """Each variable ``output:`` uses or ``vars:`` defines, and where it came from."""
 
     @property
     def store_dir(self) -> UPath:
@@ -119,9 +126,16 @@ def _names_environment(value: str) -> bool:
     return "://" not in value and (value.startswith("~") or "$" in value)
 
 
-def resolve_location(value: str, base: UPath, *, expand: bool = True) -> UPath:
-    """A path from the declaration: a URI as given, anything else against the file."""
-    expanded = _expand(value) if expand else value
+def resolve_location(
+    value: str,
+    base: UPath,
+    *,
+    expand: bool = True,
+    values: Mapping[str, str] | None = None,
+) -> UPath:
+    """A path from the declaration: a URI as given, anything else against the file.
+    A variable is read from ``values`` (the deployment's), else the environment."""
+    expanded = _expand(value, values) if expand else value
     if expand and "$" in expanded:
         raise DeploymentError(f"{value!r} names an environment variable that is unset")
     if "://" in expanded:
@@ -135,15 +149,23 @@ VARIABLE = re.compile(r"\$(\w+|\{[^}]*\})")
 
 
 def root_variables(deployment: Deployment) -> list[str]:
-    """The variables the declaration's ``output:`` names, once each: what a process
-    started with another environment needs to find the same output."""
+    """The variables the declaration's ``output:`` names and takes from the
+    environment, once each: what a process started with another environment needs to
+    find the same output. One from a ``.env`` or ``vars:`` travels with the YAML."""
+    beside = {v.name for v in deployment.variables if v.source != "environment"}
     names = (n.strip("{}") for n in VARIABLE.findall(deployment.declared_root))
-    return list(dict.fromkeys(names))
+    return [n for n in dict.fromkeys(names) if n not in beside]
 
 
-def _expand(value: str) -> str:
-    """Variables first, then ``~``, so a ``~`` a variable holds is expanded too."""
-    return os.path.expanduser(os.path.expandvars(value))
+def _expand(value: str, values: Mapping[str, str] | None = None) -> str:
+    """Variables first, from ``values`` then the environment as exported (never an
+    empty value, or a name a working-folder ``.env`` set), then ``~``, so a ``~`` a
+    variable holds is expanded too. A name set nowhere is left as written."""
+    known = {k: v for k, v in os.environ.items() if v and k not in _WORKING} | dict(
+        values or {}
+    )
+    value = VARIABLE.sub(lambda m: known.get(m.group(1).strip("{}"), m.group(0)), value)
+    return os.path.expanduser(value)
 
 
 def _upath(uri: str) -> UPath:
@@ -276,6 +298,19 @@ def _parse(text: str, source: UPath) -> Deployment:
     base = source.parent
     declared = str(raw.get("output") or raw.get("root") or ".")
     remote = not _on_this_host(str(source))
+    used = {n.strip("{}") for n in VARIABLE.findall(declared)}
+    found_vars = variables(
+        None if remote else Path(base.path),
+        declared_vars(raw.get("vars"), str(source)),
+        used,
+        {} if remote else os.environ,
+    )
+    values = {v.name: v.value for v in found_vars}
+    if remote:
+        # What the declaration's own `vars:` sets is written in it; nothing else is.
+        declared = VARIABLE.sub(
+            lambda m: values.get(m.group(1).strip("{}"), m.group(0)), declared
+        )
     if remote and _names_environment(declared):
         raise DeploymentError(
             f"{source}: output {declared!r} names this host's environment; a remote "
@@ -289,6 +324,7 @@ def _parse(text: str, source: UPath) -> Deployment:
     return Deployment(
         name=name,
         path=source,
-        root=resolve_location(declared, base, expand=not remote),
-        declared_root=declared,
+        root=resolve_location(declared, base, expand=not remote, values=values),
+        declared_root=str(raw.get("output") or raw.get("root") or "."),
+        variables=found_vars,
     )

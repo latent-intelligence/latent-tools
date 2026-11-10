@@ -18,4 +18,9 @@ class Refused(LatentWikiError):
 
 
 class DeploymentError(LatentWikiError):
-    """A deployment folder is missing, malformed, or asks for what cannot be done."""
+    """A deployment folder is missing, malformed, or asks for what cannot be done.
+    ``reason`` names a refusal by the shared storage cases' code, as the store's."""
+
+    def __init__(self, message: str, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason

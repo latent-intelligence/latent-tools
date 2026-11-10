@@ -470,3 +470,40 @@ async def test_stdout_carries_only_the_protocol(deployment: Path) -> None:
         assert [t.name for t in tools.tools] == [name for name, _, _ in TOOLS]
         result = await session.call_tool("wiki_search", {"query": "limpets"})
     assert "heronsgate:count-limpets" in result.content[0].text  # type: ignore[union-attr]
+
+
+def test_a_remote_output_reads_the_declaration_s_own_vars(
+    pushed: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What `vars:` sets is written in the declaration, so a remote one reads it; the
+    environment is still never read for it."""
+    from latent_wiki_mcp.deployment import load_deployment_folder
+
+    monkeypatch.setenv("DATA", "/never/this/host")
+    _declare(
+        pushed,
+        "schema_version: 1\nvars:\n  DATA: products\noutput: ${DATA}/x\n"
+        "wiki: {config: wiki.yaml}\n",
+    )
+    found = load_deployment_folder(pushed)
+    assert str(found.wiki_dir) == f"{pushed}/products/x/wiki"
+
+
+def test_a_local_output_takes_its_vars_unless_the_environment_sets_it(
+    deployment: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_wiki_mcp.deployment import load_deployment_folder
+
+    monkeypatch.delenv("DATA", raising=False)
+    _declare(
+        str(deployment),
+        f"schema_version: 1\nvars:\n  DATA: {tmp_path / 'a'}\noutput: ${{DATA}}\n"
+        "wiki: {config: wiki.yaml}\n",
+    )
+    found = load_deployment_folder(str(deployment))
+    assert found.wiki_dir == (tmp_path / "a").resolve() / "wiki"
+    monkeypatch.setenv("DATA", str(tmp_path / "b"))
+    assert (
+        load_deployment_folder(str(deployment)).wiki_dir
+        == (tmp_path / "b").resolve() / "wiki"
+    )

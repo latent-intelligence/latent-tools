@@ -15,7 +15,10 @@ silence. A name is refused: looking one up is for the store's own authoring comm
 A declaration read from another host is taken as written: an output with `~` or `$VAR`
 is refused rather than expanded with this host's environment, since no other host's
 values could be meant, and a value expanded here could carry this process's secrets into
-a request path.
+a request path. A variable the declaration's own `vars:` sets is part of what is
+written, and is read. On this host, a variable's value is the environment's, else the
+nearest `.env` beside or above the declaration, else its `vars:` (the store's
+`variables.py`).
 
 Adapted from kb-wiki's `deployment.py` (7d13913), reading fewer keys and so refusing
 less: it serves a declaration the store refuses for lacking `wiki:`, for a key the store
@@ -30,6 +33,7 @@ from __future__ import annotations
 
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -39,6 +43,7 @@ import yaml
 from upath import UPath
 
 from .errors import DeploymentError
+from .variables import _WORKING, Variable, declared_vars, variables
 
 #: fsspec schemes this package offers an extra for, by the extra's name.
 EXTRAS = {"s3": "s3", "s3a": "s3"}
@@ -56,6 +61,8 @@ class Deployment:
     name: str
     path: Path
     root: Path
+    variables: tuple[Variable, ...] = ()
+    """Each variable ``output:`` uses or ``vars:`` defines, and where it came from."""
 
     @property
     def context_dir(self) -> Path:
@@ -159,9 +166,29 @@ def _names_environment(value: str) -> bool:
     return "://" not in value and (value.startswith("~") or "$" in value)
 
 
-def resolve_location(value: str, base: Path, *, expand: bool = True) -> Path:
-    """A path from the declaration: a URI as given, anything else against the file."""
-    expanded = os.path.expandvars(os.path.expanduser(value)) if expand else value
+#: A variable anywhere in a location, as the shell writes one: ``$NAME`` or ``${NAME}``.
+VARIABLE = re.compile(r"\$(\w+|\{[^}]*\})")
+
+
+def _substitute(value: str, known: Mapping[str, str]) -> str:
+    """Every variable ``known`` sets, anywhere in ``value``; the rest as written."""
+    return VARIABLE.sub(lambda m: known.get(m.group(1).strip("{}"), m.group(0)), value)
+
+
+def resolve_location(
+    value: str,
+    base: Path,
+    *,
+    expand: bool = True,
+    values: Mapping[str, str] | None = None,
+) -> Path:
+    """A path from the declaration: a URI as given, anything else against the file.
+    A variable is read from ``values`` (the deployment's), else the environment as
+    exported: never an empty value, or a name a working-folder ``.env`` set."""
+    known = {k: v for k, v in os.environ.items() if v and k not in _WORKING} | dict(
+        values or {}
+    )
+    expanded = _substitute(os.path.expanduser(value), known) if expand else value
     if "://" in expanded:
         try:
             return as_path(UPath(expanded))
@@ -229,6 +256,17 @@ def _parse(text: str, source: Path) -> Deployment:
     base = source.parent
     declared = str(raw.get("output") or raw.get("root") or ".")
     remote = not _on_this_host(str(source))
+    used = {n.strip("{}") for n in VARIABLE.findall(declared)}
+    found_vars = variables(
+        None if remote else Path(base),
+        declared_vars(raw.get("vars"), str(source)),
+        used,
+        {} if remote else os.environ,
+    )
+    values = {v.name: v.value for v in found_vars}
+    if remote:
+        # What the declaration's own `vars:` sets is written in it; nothing else is.
+        declared = _substitute(declared, values)
     if remote and _names_environment(declared):
         raise DeploymentError(
             f"{source}: output {declared!r} names this host's environment; a remote "
@@ -240,5 +278,8 @@ def _parse(text: str, source: Path) -> Deployment:
             f"output is relative to its folder, or a remote URI"
         )
     return Deployment(
-        name=name, path=source, root=resolve_location(declared, base, expand=not remote)
+        name=name,
+        path=source,
+        root=resolve_location(declared, base, expand=not remote, values=values),
+        variables=found_vars,
     )

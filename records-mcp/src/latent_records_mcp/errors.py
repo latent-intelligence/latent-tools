@@ -1,4 +1,4 @@
-# Verbatim copy of kb-store at fe6e28c, below this header:
+# Verbatim copy of kb-store at e859313, below this header:
 #   src/kb_store/errors.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -10,7 +10,15 @@ class KbStoreError(Exception):
 
 
 class DeploymentError(KbStoreError):
-    """A deployment is missing, malformed, or asks for what cannot be done."""
+    """A deployment is missing, malformed, or asks for what cannot be done.
+
+    ``reason`` names a location refusal by the shared storage cases' code, such as
+    ``variable-missing``, ``vars-invalid`` or ``parent-segment``.
+    """
+
+    def __init__(self, message: str, reason: str | None = None) -> None:
+        super().__init__(message)
+        self.reason = reason
 
 
 class InputError(KbStoreError):

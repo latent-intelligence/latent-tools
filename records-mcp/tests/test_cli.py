@@ -511,3 +511,35 @@ def test_a_scheme_fsspec_does_not_know_is_refused(folder: Path) -> None:
 def test_a_store_that_cannot_be_opened_says_why(folder: Path) -> None:
     (folder / "store" / "chunks.lance").rename(folder / "store" / "gone.lance")
     _one_line_refusal(_run("--deployment", str(folder)), "chunks")
+
+
+def test_a_remote_root_reads_the_declaration_s_own_vars(
+    pushed: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """What `vars:` sets is written in the declaration, so a remote one reads it; the
+    environment is still never read for it."""
+    from latent_records_mcp.deployment import load_deployment_folder
+
+    monkeypatch.setenv("DATA", "/never/this/host")
+    _declare(pushed, "schema_version: 1\nvars:\n  DATA: products\noutput: ${DATA}/x\n")
+    found = load_deployment_folder(pushed)
+    assert str(found.store_dir) == f"{pushed}/products/x/store"
+
+
+def test_a_local_root_takes_its_vars_unless_the_environment_sets_it(
+    folder: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from latent_records_mcp.deployment import load_deployment_folder, root_variables
+
+    monkeypatch.delenv("DATA", raising=False)
+    _declare(
+        str(folder),
+        f"schema_version: 1\nvars:\n  DATA: {tmp_path / 'a'}\noutput: ${{DATA}}\n",
+    )
+    found = load_deployment_folder(str(folder))
+    assert found.store_dir == (tmp_path / "a").resolve() / "store"
+    assert root_variables(found) == []
+    monkeypatch.setenv("DATA", str(tmp_path / "b"))
+    found = load_deployment_folder(str(folder))
+    assert found.store_dir == (tmp_path / "b").resolve() / "store"
+    assert root_variables(found) == ["DATA"]

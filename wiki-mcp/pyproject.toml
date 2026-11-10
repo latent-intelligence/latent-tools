@@ -12,6 +12,7 @@ authors = [{ name = "Latent Intelligence" }]
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
+    "python-dotenv>=1.0",
     "pyyaml>=6.0",
     "typer>=0.16",
     "rich>=13.0",
