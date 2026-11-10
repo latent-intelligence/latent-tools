@@ -519,7 +519,8 @@ def test_a_tilde_in_a_variable_is_home_and_an_unset_one_is_refused(
     monkeypatch.delenv("DATA", raising=False)
     _declare(
         str(deployment),
-        "schema_version: 1\nvars:\n  DATA: ~/d\noutput: ${DATA}/o\nwiki: {config: wiki.yaml}\n",
+        "schema_version: 1\nvars:\n  DATA: ~/d\n"
+        "output: ${DATA}/o\nwiki: {config: wiki.yaml}\n",
     )
     assert (
         load_deployment_folder(str(deployment)).wiki_dir
@@ -568,6 +569,7 @@ def test_a_remote_vars_value_is_held_to_the_remote_rules(
 def test_a_variable_that_climbs_out_is_refused_locally(deployment: Path) -> None:
     _declare(
         str(deployment),
-        "schema_version: 1\nvars:\n  DATA: ../..\noutput: ${DATA}/y\nwiki: {config: wiki.yaml}\n",
+        "schema_version: 1\nvars:\n  DATA: ../..\n"
+        "output: ${DATA}/y\nwiki: {config: wiki.yaml}\n",
     )
     _one_line_refusal(_run("--deployment", str(deployment)), "climbs out")
