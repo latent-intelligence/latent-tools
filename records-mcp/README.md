@@ -7,7 +7,7 @@ object storage. It answers kb-store' `records-tools` contract: `describe`, `sear
 ## Install
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.1#subdirectory=records-mcp"
 ```
 
 Extras, as the store has them: `s3`, `gcs`, `az` for a deployment or a store in a bucket; `text`
@@ -15,7 +15,7 @@ Extras, as the store has them: `s3`, `gcs`, `az` for a deployment or a store in 
 whose space needs a model you did not install says so on the first search.
 
 ```bash
-uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.0#subdirectory=records-mcp"
+uv tool install "latent-records-mcp[s3,text] @ git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.1#subdirectory=records-mcp"
 ```
 
 To move to a new release, run the line with the new tag; the tool is replaced without asking.

@@ -1531,7 +1531,7 @@ wheels = [
 
 [[package]]
 name = "latent-records-mcp"
-version = "0.2.0"
+version = "0.2.1"
 source = { editable = "records-mcp" }
 dependencies = [
     { name = "fsspec" },
@@ -1592,7 +1592,7 @@ provides-extras = ["text", "clip", "s3", "gcs", "az"]
 
 [[package]]
 name = "latent-wiki-mcp"
-version = "0.1.4"
+version = "0.1.5"
 source = { editable = "wiki-mcp" }
 dependencies = [
     { name = "fsspec" },
