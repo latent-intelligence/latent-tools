@@ -12,6 +12,9 @@ authors = [{ name = "Latent Intelligence" }]
 license = "MIT"
 license-files = ["LICENSE"]
 dependencies = [
+    "python-dotenv>=1.0",
+    # serve.py's reply types; pydantic refuses typing.TypedDict before 3.12.
+    "typing-extensions>=4.6",
     "lancedb>=0.39,<0.40",
     "pyarrow>=18.0",
     "numpy>=1.26",

@@ -47,19 +47,26 @@ serve a store wherever it was copied, with or without the deployment that built 
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`. The server reads the
 declaration's `schema_version`, `name` and `output:` and serves `<output>/store`; `output:`
 defaults to the folder itself. An older declaration says `root:` for `output:`, and serves
-the same. A local declaration's output expands `$VAR` and then `~`, so a variable holding
-`~` resolves under home; a remote declaration's output is taken as written; one that needs
-this host's environment (`~`, `$VAR`) or its disk (an absolute path) is refused. It reads
-nothing else, so it serves some declarations `kb-store serve` refuses, such as one without
-`store_id`. `--warm` loads every space's model in the background at start.
+the same. A variable in `output:`, such as `${DATA}`, is put in place before the
+location is read. On a local declaration its value is the first of: the environment as
+exported, the nearest
+`.env` beside or above the declaration, then the declaration's `vars:`; an empty value is
+unset, and one set nowhere is refused. A remote declaration reads only its own `vars:`, never
+this host's environment or a `.env`, and its output is then held to the remote rules: one
+that needs this host's home (`~`) or disk (an absolute path, `file://`) is refused. A
+variable that makes a short output climb out with `..` is refused either way. Besides
+`schema_version`, `name`, `output:` and `vars:` it reads nothing else, so it serves some declarations `kb-store serve`
+refuses, such as one without `store_id`. Variables first, then `~`, so a variable holding `~`
+resolves under home. `--warm` loads every space's model in the background at start.
 
 HTTP: `--transport http` serves Streamable HTTP at `/mcp` and refuses to start without a
 bearer token in `$LATENT_RECORDS_SERVE_TOKEN`, unless `--insecure-local` is given with a
 loopback host: exactly `127.0.0.1`, `localhost` or `::1` (or `[::1]`).
 
 `--print-config` prints the block after opening the store, so it is one that starts. When
-`output:` names environment variables, the stdio block lists them in `env` as `${VAR}`, never
-their values; the client's environment must hold them.
+`output:` takes a variable from the environment, the stdio block lists it in `env` as
+`${VAR}`, never its value; the client's environment must hold it. One the declaration's `.env`
+or `vars:` sets travels with the declaration and is not listed.
 
 ## Without internet access
 

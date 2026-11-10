@@ -33,10 +33,17 @@ its own `<label>:<key>` form swaps the store's id for the label itself.
 `<folder>` is a deployment's folder, holding `<folder name>.yaml`: a local path, or any URI
 fsspec opens (`s3://…/deployments/<name>`). The server reads the declaration's `schema_version`,
 `name` and `output:` and serves `<output>/wiki` with `<output>/context`; `output:` defaults to
-the folder itself, and an older declaration that says `root:` for it serves the same. A
-remote declaration's output is taken as written; one that needs this host's environment
-(`~`, `$VAR`) or its disk (an absolute path) is refused. It reads nothing else, so it serves
-some declarations the store's own `serve` refuses, such as one without `wiki:`. It refuses a
+the folder itself, and an older declaration that says `root:` for it serves the same.
+A variable in `output:`, such as `${DATA}`, is put in place before the
+location is read. On a local declaration its value is the first of: the environment as
+exported, the nearest
+`.env` beside or above the declaration, then the declaration's `vars:`; an empty value is
+unset, and one set nowhere is refused. A remote declaration reads only its own `vars:`, never
+this host's environment or a `.env`, and its output is then held to the remote rules: one
+that needs this host's home (`~`) or disk (an absolute path, `file://`) is refused. A
+variable that makes a short output climb out with `..` is refused either way. Besides
+`schema_version`, `name`, `output:` and `vars:` it reads nothing else, so it serves some declarations the store's own `serve`
+refuses, such as one without `wiki:`. It refuses a
 name, a `name:` that differs from the folder's, a store's own `wiki/` folder in place of its
 deployment's, an unpublished store, and a declaration that says both `output:` and `root:`.
 

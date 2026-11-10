@@ -1,4 +1,4 @@
-# Verbatim copy of kb-store at fe6e28c, below this header:
+# Verbatim copy of kb-store at e859313, below this header:
 #   src/kb_store/serve.py
 # Do not edit; sync from the store. tests/test_verbatim.py compares it.
 
@@ -31,12 +31,13 @@ from __future__ import annotations
 
 import hmac
 import inspect
-import json
 import logging
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from datetime import datetime
-from typing import Any, cast
+from typing import Any, NotRequired, TypeVar, cast
+
+from typing_extensions import TypedDict
 
 from . import __version__
 from .backends.base import Eq
@@ -47,6 +48,8 @@ from .search import MODES, Hit, Mode, covering
 from .store import Store
 
 log = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 MAX_LIMIT = 50
 
@@ -114,10 +117,47 @@ def store_id_of(store: Store) -> str:
     return store.store_id
 
 
-def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
-    return {
-        "id": keys.name(hit.id),
-        "record_id": keys.name(hit.record_id),
+class Pages(TypedDict):
+    start: int | None
+    end: int | None
+    scope: str
+
+
+class HitReply(TypedDict):
+    id: str
+    record_id: str
+    title: str | None
+    section: list[str]
+    pages: Pages
+    text: str
+    score: float
+    score_kind: str
+    vector_rank: int | None
+    fts_rank: int | None
+    space: str | None
+    media_path: str | None
+    refs: list[str]
+    referenced_by: list[str]
+    citation: NotRequired[dict[str, Any]]
+
+
+class SearchReply(TypedDict):
+    hits: list[HitReply]
+    truncated: bool
+
+
+class ContainsReply(TypedDict):
+    phrase: str
+    total: int
+    by_record: dict[str, int]
+    ids: list[str]
+    truncated: bool
+
+
+def hit_dict(hit: Hit, keys: Keys) -> HitReply:
+    reply: HitReply = {
+        "id": keys.prefix + hit.id,
+        "record_id": keys.prefix + hit.record_id,
         "title": hit.title,
         "section": list(hit.section),
         "pages": {
@@ -134,8 +174,10 @@ def hit_dict(hit: Hit, keys: Keys) -> dict[str, Any]:
         "media_path": hit.media_path,
         "refs": keys.names(hit.refs),
         "referenced_by": keys.names(hit.referenced_by),
-        **({"citation": hit.citation} if hit.citation else {}),
     }
+    if hit.citation:
+        reply["citation"] = hit.citation
+    return reply
 
 
 def recommended(spaces: Mapping[str, Any]) -> dict[str, str]:
@@ -384,7 +426,7 @@ def build_server(store: Store) -> Any:
     # a read can leave the machine.
     read_only = ToolAnnotations(read_only_hint=True, open_world_hint=True)
 
-    def guarded(call: Any) -> Any:
+    def guarded(call: Callable[[], T]) -> T:
         try:
             return call()
         except ToolError:
@@ -411,9 +453,9 @@ def build_server(store: Store) -> Any:
         return bare
 
     @server.tool(name="describe", annotations=read_only)
-    def describe_tool() -> str:
+    def describe_tool() -> dict[str, Any]:
         """The store: row counts, and which spaces cover which targets."""
-        return json.dumps(guarded(lambda: _described(store, len(records), total)))
+        return guarded(lambda: _described(store, len(records), total))
 
     @server.tool(name="search", annotations=read_only)
     def search_tool(
@@ -424,7 +466,7 @@ def build_server(store: Store) -> Any:
         limit: int = 10,
         record_id: str | None = None,
         expand_refs: bool = False,
-    ) -> str:
+    ) -> SearchReply:
         """Rank one target (chunks, tables, figure_captions, equations,
         figure_images) in one space by vector, fts or hybrid, 1 to 50 hits. Name a
         space when several cover the target (see describe); figure_images take mode
@@ -461,42 +503,38 @@ def build_server(store: Store) -> Any:
                 )
 
         hits = guarded(ranked)
-        return json.dumps(
-            {
-                "hits": [hit_dict(h, keys) for h in hits],
-                "truncated": len(hits) == limit,
-            }
-        )
+        return {
+            "hits": [hit_dict(h, keys) for h in hits],
+            "truncated": len(hits) == limit,
+        }
 
     @server.tool(name="contains", annotations=read_only)
     def contains_tool(
         phrase: str, record_id: str | None = None, tables: list[str] | None = None
-    ) -> str:
+    ) -> ContainsReply:
         """Whether a phrase occurs, exactly (whole words, in order, any case), and
         where. total 0 means it does not occur."""
         within = scope(record_id)
         found = guarded(
             lambda: store.contains(phrase, tables=tables or None, record_id=within)
         )
-        return json.dumps(
-            {
-                "phrase": found.phrase,
-                "total": found.total,
-                "by_record": {keys.prefix + r: n for r, n in found.by_record.items()},
-                "ids": keys.names(found.ids),
-                "truncated": found.truncated,
-            }
-        )
+        return {
+            "phrase": found.phrase,
+            "total": found.total,
+            "by_record": {keys.prefix + r: n for r, n in found.by_record.items()},
+            "ids": keys.names(found.ids),
+            "truncated": found.truncated,
+        }
 
     @server.tool(name="get", annotations=read_only)
-    def get_tool(id: str) -> str:
+    def get_tool(id: str) -> dict[str, Any]:
         """One row in full by id: a record, or a chunk, figure, table or equation. A
         chunk also names its previous and next chunk."""
         bare = keys.read(id)
         row = guarded(lambda: get(store, bare, keys))
         if row is None:
             raise ToolError(f"no row {bare!r}")
-        return json.dumps(row)
+        return row
 
     for tool in (describe_tool, search_tool, contains_tool, get_tool):
         declared[tool.__name__.removesuffix("_tool")] = set(
