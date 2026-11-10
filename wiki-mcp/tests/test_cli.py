@@ -516,6 +516,7 @@ def test_a_tilde_in_a_variable_is_home_and_an_unset_one_is_refused(
 
     home = tmp_path / "home"
     monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.delenv("DATA", raising=False)
     _declare(
         str(deployment),
@@ -552,18 +553,23 @@ def test_a_local_output_reads_the_nearest_env_and_skips_an_empty_value(
 
 
 @pytest.mark.parametrize(
-    "value", ["~/stores", "/srv/stores", "file:///srv/stores", "../.."]
+    ("value", "refusal"),
+    [
+        ("~/stores", "names this host's environment"),
+        ("/srv/stores", "is a local path"),
+        ("file:///srv/stores", "is a local path"),
+        ("../..", "climbs out"),
+    ],
 )
 def test_a_remote_vars_value_is_held_to_the_remote_rules(
-    value: str, pushed: str
+    value: str, refusal: str, pushed: str
 ) -> None:
     _declare(
         pushed,
         f"schema_version: 1\nvars:\n  DATA: '{value}'\noutput: ${{DATA}}/y\n"
         "wiki: {config: wiki.yaml}\n",
     )
-    result = _run("--deployment", pushed)
-    assert result.exit_code != 0, result.output
+    _one_line_refusal(_run("--deployment", pushed), refusal)
 
 
 def test_a_variable_that_climbs_out_is_refused_locally(deployment: Path) -> None:

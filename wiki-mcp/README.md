@@ -36,7 +36,7 @@ fsspec opens (`s3://…/deployments/<name>`). The server reads the declaration's
 the folder itself, and an older declaration that says `root:` for it serves the same.
 A variable in `output:`, such as `${DATA}`, is put in place before the
 location is read. On a local declaration its value is the first of: the environment as
-exported (a `.env` the server reads from the folder it runs in never counts), the nearest
+exported, the nearest
 `.env` beside or above the declaration, then the declaration's `vars:`; an empty value is
 unset, and one set nowhere is refused. A remote declaration reads only its own `vars:`, never
 this host's environment or a `.env`, and its output is then held to the remote rules: one
