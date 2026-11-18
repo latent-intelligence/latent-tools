@@ -18,30 +18,30 @@ With [uv](https://docs.astral.sh/uv/getting-started/installation/) installed:
 **Wiki**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.5#subdirectory=wiki-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools#subdirectory=wiki-mcp"
 latent-wiki-mcp --help
 ```
 
 **Records**
 
 ```bash
-uv tool install "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.1#subdirectory=records-mcp"
+uv tool install "git+https://github.com/latent-intelligence/latent-tools#subdirectory=records-mcp"
 latent-records-mcp --help
 ```
 
-Each tool has its own releases. To update, rerun its install command with
-the new release tag.
+These install the latest code on `main`. To update, rerun the install command with
+`--reinstall`.
 
 ## Shortcut: run with uvx
 
 Use `uvx` to run either tool without a separate install step:
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@wiki-mcp-v0.1.5#subdirectory=wiki-mcp" latent-wiki-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools#subdirectory=wiki-mcp" latent-wiki-mcp --help
 ```
 
 ```bash
-uvx --from "git+https://github.com/latent-intelligence/latent-tools@records-mcp-v0.2.1#subdirectory=records-mcp" latent-records-mcp --help
+uvx --from "git+https://github.com/latent-intelligence/latent-tools#subdirectory=records-mcp" latent-records-mcp --help
 ```
 
 `uvx` runs the tool from uv's cache, which `uv cache clean` or `uv cache prune` removes. So
